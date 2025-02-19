@@ -1,0 +1,36 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Raylib (MinGW64)",
+            "type": "shell",
+            "command": "C:/msys64/mingw64/bin/g++.exe",
+            "args": [
+                "src/main.cpp",
+                "-o", "build/DragonRage.exe",
+                "-I", "include",
+                "-L", "lib",
+                "-lraylib",
+                "-lopengl32",
+                "-lgdi32",
+                "-lwinmm"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"],
+            "detail": "Compila o projeto Raylib com MinGW64"
+        }, 
+        {
+            "label": "Rodar DragonRage",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/DragonRage.exe",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        }
+    ]
+}
