@@ -4,9 +4,17 @@
 #include <string>
 #include <vector>
 
-#include "sysSettings.cpp"
+enum class SysState {
+    EDITOR,
+    MENU,
+    PLAYING,
+    PAUSED
+};
 
 SysState sysState = SysState::PLAYING;
+
+const int SCRWIDTH = 1280;
+const int SCRHEIGHT = 720;
 
 struct Scenery {
     Vector3 pos;
@@ -40,7 +48,7 @@ std::vector<Scenery> MakeObject(Vector3 position, Vector3 minSize, Vector3 maxSi
 }
 
 int main() {
-    InitWindow(1280, 720, "SPEED");
+    InitWindow(SCRWIDTH, SCRHEIGHT, "SPEED");
 
     Camera camera = {{-0.12f, 0.4f, 10.11f}, (Vector3){0.0f, 0.0f, 0.0f}, (Vector3){0.0f, 1.0f, 0.0f}, 50.0f, 0};
     Model model = LoadModel("resources/models/Mach5.glb");

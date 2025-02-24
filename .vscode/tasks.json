@@ -1,36 +1,48 @@
 {
-    "version": "2.0.0",
-    "tasks": [
-        {
-            "label": "Build Raylib (MinGW64)",
-            "type": "shell",
-            "command": "C:/msys64/mingw64/bin/g++.exe",
-            "args": [
-                "src/main.cpp",
-                "-o", "build/DragonRage.exe",
-                "-I", "include",
-                "-L", "lib",
-                "-lraylib",
-                "-lopengl32",
-                "-lgdi32",
-                "-lwinmm"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": ["$gcc"],
-            "detail": "Compila o projeto Raylib com MinGW64"
-        }, 
-        {
-            "label": "Rodar DragonRage",
-            "type": "shell",
-            "command": "${workspaceFolder}/build/DragonRage.exe",
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": []
-        }
-    ]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Raylib (MinGW64)",
+      "type": "shell",
+      "command": "C:/msys64/mingw64/bin/g++.exe",
+      "args": [
+        "src/main.cpp",
+        "-o",
+        "build/DragonRage.exe",
+        "-I",
+        "include",
+        "-L",
+        "lib",
+        "-lraylib",
+        "-lopengl32",
+        "-lgdi32",
+        "-lwinmm"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Build Raylib (macOS)",
+      "type": "shell",
+      "command": "clang++ src/main.cpp -std=c++11 -o build/DragonRage -I /opt/homebrew/include -L /opt/homebrew/lib -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo && chmod +x build/DragonRage && ./build/DragonRage",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "Rodar DragonRage",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/DragonRage.exe",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
 }
