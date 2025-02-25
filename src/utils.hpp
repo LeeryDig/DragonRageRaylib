@@ -14,6 +14,7 @@ class Utils {
     static float ConvertAngleToRadial(float angle) {
         return angle * PI / 180;
     }
+    
     static std::string Vector3ToString(const Vector3 &vec) {
         return "(" + std::to_string(vec.x) + ", " +
                std::to_string(vec.y) + ", " +
