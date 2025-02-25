@@ -22,6 +22,21 @@ struct Scenery {
     Color color;
 };
 
+struct Player {
+    Vector3 position;
+    Vector3 size;
+    Vector3 aixs;
+    float rotation;
+    float fuel;
+    int health;
+    float consumption;
+    float maxSpeed;
+};
+
+float FuelConsume(float velocity, float consumption) {
+    return velocity * consumption;
+}
+
 std::string Vector3ToString(const Vector3 &vec) {
     return "(" + std::to_string(vec.x) + ", " +
            std::to_string(vec.y) + ", " +
@@ -59,40 +74,58 @@ int main() {
 
     std::vector<Scenery> roads = MakeObject((Vector3){0, 0.01, 10}, (Vector3){20, 0.1, 10}, (Vector3){20, 0.1, 10}, GRAY, 13);
 
-    Vector3 playerPosition = {0.0f, 0.2f, 10.0f};
-    Vector3 playerSize = {2.0f, 2.0f, 2.0f};
-    Vector3 pRotationAxis = {0.0f, 1.0f, 0.0f};
-    float pRotation = 0.0f;
+    Player player;
+    player.position = {0.0f, 0.2f, 10.0f};
+    player.size = {2.0f, 2.0f, 2.0f};
+    player.aixs = {0.0f, 1.0f, 0.0f};
+    player.rotation = 0.0f;
+    player.health = 10;
+    player.fuel = 1;
+    player.consumption = 0.005;
+    player.maxSpeed = 2.0;
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
+        // DisableCursor();
         // Update
         // std::string cStr = Vector3ToString(camera.position);
-        std::string pStr = Vector3ToString(playerPosition);
-        DisableCursor();
-        float radialPRotation = ConvertAngleToRadial(pRotation);
-        float amout = cosf(radialPRotation) * 0.3f;
-        Clamp(amout, -0.3f, 0.3f);
+        // std::string pStr = Vector3ToString(player.position);
+        if (velocity < 0.05) {
+            velocity = 0.0f;
+        }
 
-        if (IsKeyDown(KEY_UP) && velocity < 0.85f) {
+        
+
+        // Player Status
+        if (player.fuel > 0.0) {
+            player.fuel -= FuelConsume(velocity, player.consumption);
+        } else {
+            velocity = Lerp(velocity, 0.0f, player.consumption);
+        }
+
+        // Move player
+        if (IsKeyDown(KEY_UP) && velocity < 10.0f) {
             velocity += 0.008f;
         } else if (IsKeyDown(KEY_DOWN) && velocity > 0.2f) {
             velocity -= 0.006f;
         }
 
-        // Move player
-        if (IsKeyDown(KEY_RIGHT) && playerPosition.x <= 10) {
-            pRotation -= 0.5;
-            playerPosition.x += amout;
+        float radialPRotation = ConvertAngleToRadial(player.rotation);
+        float amout = cosf(radialPRotation) * 0.3f;
+        Clamp(amout, -0.3f, 0.3f);
+
+        if (IsKeyDown(KEY_RIGHT) && player.position.x <= 10) {
+            player.rotation -= 0.5;
+            player.position.x += amout;
             camera.position.x += amout;
             camera.target.x += amout;
-        } else if (IsKeyDown(KEY_LEFT) && playerPosition.x >= -10) {
-            pRotation += 0.5;
-            playerPosition.x -= amout;
+        } else if (IsKeyDown(KEY_LEFT) && player.position.x >= -10) {
+            player.rotation += 0.5;
+            player.position.x -= amout;
             camera.position.x -= amout;
             camera.target.x -= amout;
         } else {
-            pRotation = Lerp(pRotation, 0.0f, 0.05f);
+            player.rotation = Lerp(player.rotation, 0.0f, 0.07f);
         }
 
         // else if (IsKeyDown(KEY_UP)) camera.position.y += 0.01f;
@@ -108,7 +141,7 @@ int main() {
         ClearBackground(RAYWHITE);
 
         BeginMode3D(camera);
-        DrawModelEx(model, playerPosition, pRotationAxis, pRotation, (Vector3){1.0f, 1.0f, 1.0f}, WHITE);
+        DrawModelEx(model, player.position, player.aixs, player.rotation, (Vector3){1.0f, 1.0f, 1.0f}, WHITE);
         DrawCube((Vector3){0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
 
         for (size_t i = 0; i < roads.size(); i++) {
@@ -154,9 +187,16 @@ int main() {
 
         EndMode3D();
 
+        if (velocity < 0.1f || player.health <= 0.0f) {
+            DrawText("SE FUDEU!", 600, 360, 50, VIOLET);
+        }
+
         DrawText("NICE GRAPHICS", 10, 30, 10, BLACK);
-        DrawText(std::to_string(ConvertAngleToRadial(pRotation)).c_str(), 220, 80, 20, BLACK);
-        DrawText(pStr.c_str(), 220, 100, 20, BLACK);
+        DrawText(std::to_string(velocity).c_str(), 220, 80, 20, BLACK);
+        DrawText("Health: ", 20, 50, 20, BLACK);
+        DrawText(std::to_string(player.health).c_str(), 100, 50, 20, BLACK);
+        DrawText("Fuel: ", 20, 80, 20, BLACK);
+        DrawText(std::to_string((int)player.fuel).c_str(), 80, 80, 20, BLACK);
 
         DrawFPS(10, 10);
 
