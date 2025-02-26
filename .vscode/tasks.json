@@ -27,7 +27,7 @@
     {
       "label": "Build Raylib (macOS)",
       "type": "shell",
-      "command": "clang++ src/main.cpp -std=c++11 -o build/DragonRage -I /opt/homebrew/include -L /opt/homebrew/lib -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo && chmod +x build/DragonRage && ./build/DragonRage",
+      "command": "clang++ $(find src -name '*.cpp') -std=c++11 -o build/DragonRage -I /opt/homebrew/include -L /opt/homebrew/lib -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo && chmod +x build/DragonRage && ./build/DragonRage",
       "group": {
         "kind": "build",
         "isDefault": true
