@@ -6,21 +6,14 @@
 
 #include "utils.hpp"
 #include "roads.hpp"
+#include "scenery.hpp"
 
-namespace gameState {
 #include "gameState.hpp"
-}
 
-gameState::SysState sysState = gameState::SysState::PLAYING;
+SysState sysState = SysState::PLAYING;
 
 const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
-
-struct Scenery {
-    Vector3 pos;
-    Vector3 size;
-    Color color;
-};
 
 struct Car {
     Model model;
@@ -39,26 +32,6 @@ struct Game {
 
 float FuelConsume(float velocity, float consumption) {
     return velocity * consumption;
-}
-
-std::vector<Scenery> MakeObject(Vector3 position, Vector3 minSize, Vector3 maxSize, Color color, int quantity) {
-    std::vector<Scenery> result;
-    for (size_t i = 0; i < quantity; i++) {
-        float size_x = (float)GetRandomValue((int)minSize.x, (int)maxSize.x);
-        float size_y = (float)GetRandomValue((int)minSize.y, (int)maxSize.y);
-        float size_z = (float)GetRandomValue((int)minSize.z, (int)maxSize.z);
-        Vector3 newPos = {position.x, position.y, position.z -= size_z};
-        Scenery scenery = {newPos, {size_x, size_y, size_z}, color};
-
-        result.push_back(scenery);
-    }
-    return result;
-}
-
-void ColorSelection(std::vector<Scenery>& objects, Color color1, Color color2) {
-    for (size_t i = 0; i < objects.size(); i++) {
-        objects[i].color = (i % 2) ? color1 : color2;
-    }
 }
 
 int main() {
@@ -86,14 +59,6 @@ int main() {
     game.distance = 0.0f;
 
     std::vector<Roads> roads = GenerateRoads(30, -30.0);
-
-    std::vector<Scenery> rightBuildings = MakeObject((Vector3){25, 0, 0}, (Vector3){10, 25, 10}, (Vector3){15, 60, 15}, DARKBLUE, 10);
-    std::vector<Scenery> leftBuildings = MakeObject((Vector3){-25, 0, 0}, (Vector3){10, 25, 10}, (Vector3){15, 60, 15}, DARKBLUE, 10);
-
-    std::vector<Scenery> obstacles = MakeObject((Vector3){0, 0.01, 0}, (Vector3){1, 1.5, 1}, (Vector3){20, 0.1, 10}, GRAY, 13);
-
-    ColorSelection(rightBuildings, DARKBLUE, DARKGRAY);
-    ColorSelection(leftBuildings, DARKBLUE, DARKGRAY);
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
@@ -153,6 +118,8 @@ int main() {
             camera.position.z -= 0.1f;
         else if (IsKeyDown(KEY_W))
             camera.position.z += 0.1f;
+        else if (IsKeyDown(KEY_F1))
+            camera.position = car.cameraPos;
 
         // Draw
         BeginDrawing();
@@ -162,7 +129,7 @@ int main() {
         BeginMode3D(camera);
         DrawModelEx(car.model, car.position, car.axis, car.rotation, car.size, WHITE);
         DrawCube((Vector3){0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
-        
+
         UpdateRoads(roads, car.velocity);
         DrawRoads(roads);
 
@@ -172,7 +139,6 @@ int main() {
             DrawText("Acabou a gasosa", 400, 360, 50, VIOLET);
         }
 
-        DrawText("NICE GRAPHICS", 10, 30, 10, BLACK);
         DrawText(std::to_string((int)(car.velocity * 100.0)).c_str(), 600, 500, 20, BLACK);
         DrawText("DISTANCE", 1000, 80, 20, BLACK);
         DrawText(std::to_string((int)game.distance).c_str(), 1000, 100, 20, WHITE);

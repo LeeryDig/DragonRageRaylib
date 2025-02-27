@@ -26,19 +26,22 @@ void DrawRoads(std::vector<Roads>& roads) {
 }
 
 void UpdateRoads(std::vector<Roads>& roads, float speed) {
-    float minZ = roads[0].position.z;
-    
-    for (const auto& road : roads) {
-        if (road.position.z < minZ) {
-            minZ = road.position.z;
-        }
+    for (auto& road : roads) {
+        road.position.z += speed;
     }
 
     for (auto& road : roads) {
-        road.position.z += speed;
-
         if (road.position.z >= 20.0f) {
-            road.position.z = minZ - road.length;
+            // Encontra a road que está mais para trás (maior valor de Z negativo)
+            float lastRoadZ = roads[0].position.z;
+            for (const auto& r : roads) {
+                if (r.position.z < lastRoadZ) {
+                    lastRoadZ = r.position.z;
+                }
+            }
+
+            // Move a road para trás da última road
+            road.position.z = lastRoadZ - road.length;
         }
     }
 }
