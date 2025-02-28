@@ -4,20 +4,7 @@
     {
       "label": "Build Raylib (MinGW64)",
       "type": "shell",
-      "command": "C:/msys64/mingw64/bin/g++.exe",
-      "args": [
-        "src/main.cpp",
-        "-o",
-        "build/DragonRage.exe",
-        "-I",
-        "include",
-        "-L",
-        "lib",
-        "-lraylib",
-        "-lopengl32",
-        "-lgdi32",
-        "-lwinmm"
-      ],
+      "command": "C:/msys64/mingw64/bin/g++.exe $(Get-ChildItem -Path src -Filter *.cpp | ForEach-Object { $_.FullName }) -o build/DragonRage.exe -I include -L lib -lraylib -lopengl32 -lgdi32 -lwinmm",
       "group": {
         "kind": "build",
         "isDefault": true

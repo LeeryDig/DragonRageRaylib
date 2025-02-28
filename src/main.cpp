@@ -59,6 +59,7 @@ int main() {
     game.distance = 0.0f;
 
     std::vector<Roads> roads = GenerateRoads(30, -30.0);
+    std::vector<Scenery> buildings = GenerateScenery(15, 10, 50, 10);
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
@@ -129,6 +130,9 @@ int main() {
         BeginMode3D(camera);
         DrawModelEx(car.model, car.position, car.axis, car.rotation, car.size, WHITE);
         DrawCube((Vector3){0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
+
+        UpdateScenery(buildings, car.velocity);
+        DrawScenery(buildings, game.distance);
 
         UpdateRoads(roads, car.velocity);
         DrawRoads(roads);
