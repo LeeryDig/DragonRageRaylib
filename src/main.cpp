@@ -22,7 +22,7 @@ struct Car {
     Vector3 size;
     Vector3 axis;
     float rotation;
-    float fuel, consumption, minSpeed, maxSpeed, health, velocity;
+    float fuel, consumption, crusingSpeed, maxSpeed, health, velocity;
 };
 
 struct Game {
@@ -49,43 +49,40 @@ int main() {
     car.fuel = 60;
     car.consumption = 0.005;
     car.maxSpeed = 2.0;
-    car.minSpeed = 0.5;
+    car.crusingSpeed = 0.55;
     car.velocity = 0.85;
     car.cameraPos = {0.0f, 0.22f, 0.1f};
 
-    Camera camera = {car.cameraPos, (Vector3){0.0f, 0.4f, -1.0f}, (Vector3){0.0f, 1.0f, 0.0f}, 50.0f, 0};
+    Camera camera = {car.cameraPos, Vector3{0.0f, 0.4f, -1.0f}, Vector3{0.0f, 1.0f, 0.0f}, 50.0f, 0};
 
     Game game;
     game.distance = 0.0f;
 
     std::vector<Roads> roads = GenerateRoads(30, -30.0);
-    std::vector<Scenery> buildings = GenerateScenery(15, 10, 50, 10);
+    std::vector<Scenery> buildingsRight = GenerateScenery(15, 10, 50, 10, 0);
+    std::vector<Scenery> buildingsLeft = GenerateScenery(15, 10, 50, 10, 1);
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
         // DisableCursor();
-        // Update
         game.distance += car.velocity * GetFrameTime();
 
         if (car.velocity < 0.05) {
             car.velocity = 0.0f;
         }
 
-        // Player Status
         if (car.fuel > 0.0) {
             car.fuel -= FuelConsume(car.velocity, car.consumption);
-            car.velocity = Clamp(car.velocity, car.minSpeed, car.maxSpeed);
+            car.velocity = Clamp(car.velocity, car.crusingSpeed, car.maxSpeed);
         } else {
-            car.velocity = Lerp(car.velocity, 0.0f, car.consumption);
+            car.velocity = Lerp(car.velocity, 0.0f, 0.005);
         }
-
-        // Move player
 
         if (IsKeyDown(KEY_UP) && car.fuel > 0.0) {
             car.velocity += Lerp(0.0, 0.1, 0.14);
         } else if (IsKeyDown(KEY_DOWN) && car.fuel > 0.0) {
             car.velocity -= Lerp(0.0, 0.05, 0.1);
-        } else if (car.velocity >= car.minSpeed) {
+        } else if (car.velocity >= car.crusingSpeed) {
             car.velocity -= Lerp(0.0, 0.01, 0.05);
         }
 
@@ -107,21 +104,6 @@ int main() {
             car.rotation = Lerp(car.rotation, 0.0f, 0.07f);
         }
 
-        if (IsKeyDown(KEY_E))
-            camera.position.y += 0.1f;
-        else if (IsKeyDown(KEY_Q))
-            camera.position.y -= 0.1f;
-        else if (IsKeyDown(KEY_A))
-            camera.position.x -= 0.1f;
-        else if (IsKeyDown(KEY_D))
-            camera.position.x += 0.1f;
-        else if (IsKeyDown(KEY_S))
-            camera.position.z -= 0.1f;
-        else if (IsKeyDown(KEY_W))
-            camera.position.z += 0.1f;
-        else if (IsKeyDown(KEY_F1))
-            camera.position = car.cameraPos;
-
         // Draw
         BeginDrawing();
 
@@ -129,10 +111,12 @@ int main() {
 
         BeginMode3D(camera);
         DrawModelEx(car.model, car.position, car.axis, car.rotation, car.size, WHITE);
-        DrawCube((Vector3){0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
+        DrawCube(Vector3{0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
 
-        UpdateScenery(buildings, car.velocity);
-        DrawScenery(buildings, game.distance);
+        UpdateScenery(buildingsLeft, car.velocity);
+        DrawScenery(buildingsLeft, game.distance);
+        UpdateScenery(buildingsRight, car.velocity);
+        DrawScenery(buildingsRight, game.distance);
 
         UpdateRoads(roads, car.velocity);
         DrawRoads(roads);

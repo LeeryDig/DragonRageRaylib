@@ -27,7 +27,7 @@ void DrawRoads(std::vector<Roads>& roads) {
 
 void UpdateRoads(std::vector<Roads>& roads, float speed) {
     for (auto& road : roads) {
-        road.position.z += speed;
+        road.position.z += (speed * 5) * GetFrameTime();
     }
 
     for (auto& road : roads) {
