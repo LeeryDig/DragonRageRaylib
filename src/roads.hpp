@@ -10,7 +10,7 @@ struct Roads {
     float length;
 };
 
-std::vector<Roads> GenerateRoads(int num, float beginPosition);
+std::vector<Roads> GenerateRoads(int total);
 
 void DrawRoads(std::vector<Roads>& roads);
 

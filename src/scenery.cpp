@@ -1,45 +1,46 @@
 #include "scenery.hpp"
+
 #include <iostream>
 
-std::vector<Scenery> GenerateScenery(int num, float beginDistance, float endDistance, float frequency, int side) {
+std::vector<Scenery> GenerateScenery(float xPos, float total, float frequency) {
     std::vector<Scenery> listOfScenery;
+
+    Model model = LoadModel("resources/models/Building.glb");
+    Texture2D objectTexture = LoadTexture("resources/textures/Building.png");
+    SetMaterialTexture(&model.materials[0], MATERIAL_MAP_DIFFUSE, objectTexture);
+    BoundingBox bbox = GetModelBoundingBox(model);
+    float zPos = -30.0;
+    float length = bbox.max.z - bbox.min.z;
     
-    Vector3 position = side == 1 ? Vector3{6.0, 0.0, -30.0} : Vector3{-6.0, 0.0, -30.0};
-
-    for (size_t i = 0; i < num; i++) {
-        Model model = LoadModel("resources/models/Building.glb");
-        Texture2D objectTexture = LoadTexture("resources/models/Building.png");
-        SetMaterialTexture(&model.materials[0], MATERIAL_MAP_DIFFUSE, objectTexture);
-        BoundingBox bbox = GetModelBoundingBox(model);
-
+    for (size_t i = 0; i < total; i++) {
         Scenery scenery;
-        scenery.model = model;
-        scenery.beginDistance = beginDistance;
-        scenery.endDistance = endDistance;
-        scenery.frenquecy = frequency;
-        scenery.position = position;
+        scenery.model = model;      
+        scenery.position = Vector3{xPos, 0.0, zPos};
+        zPos = length + frequency;
         listOfScenery.push_back(scenery);
     }
     return listOfScenery;
 }
 
-void DrawScenery(std::vector<Scenery>& listOfScenery, float distance) {
-    Scenery firstObject = listOfScenery[0];
-    if (distance < firstObject.beginDistance || distance > firstObject.endDistance) {
-        return;
+void DrawScenery(std::vector<Scenery>& scenery) {
+    for (size_t i = 0; i < scenery.size(); i++)
+    {
+        DrawModel(scenery[i].model, scenery[i].position, scenery[i].scale, WHITE);
     }
-    for (const auto& object : listOfScenery) {
-        float distance = Vector3Distance(Vector3{0.0, 0.0, 0.0}, object.position);
-        float scale = 1.0 - (distance - 1.0) / (0.0 - 1.0);
-        std::cout << scale;
-        DrawModelEx(object.model, object.position, Vector3{0.0, 1.0, 0.0}, 0.0f, Vector3{scale, scale, scale}, WHITE);
-    }
+    
 }
 
 void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed) {
-    for (auto& object : listOfScenery) {
-        object.position.z += speed * GetFrameTime();
+    for (size_t i = 0; i < listOfScenery.size(); i++)
+    {
+        float distance = Vector3Distance(listOfScenery[i].position, Vector3{0.0, 0.0, 0.0});
+        listOfScenery[i].position.z += speed * GetFrameTime();
+    
+        float scaleFactor = 1.0f / (1.0f + distance * 0.1f);
+    
+        listOfScenery[i].scale = scaleFactor;
     }
+    
 
     for (auto& object : listOfScenery) {
         if (object.position.z >= 20.0f) {
@@ -49,7 +50,7 @@ void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed) {
                     lastObjectZ = o.position.z;
                 }
             }
-            object.position.z = lastObjectZ + object.frenquecy;
+            object.position.z = lastObjectZ ;
         }
     }
 }

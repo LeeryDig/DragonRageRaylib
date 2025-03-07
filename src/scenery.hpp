@@ -5,17 +5,14 @@
 #include <raymath.h>
 #include <vector>
 
-
 struct Scenery {
     Model model;
     Vector3 position;
-    float beginDistance;
-    float endDistance;
-    float frenquecy;
+    float scale;
 };
 
-std::vector<Scenery> GenerateScenery(int num, float beginDistance, float endDistance, float frequency, int side);
-void DrawScenery(std::vector<Scenery>& listOfScenery, float distance);
+std::vector<Scenery> GenerateScenery(float xPos, float total, float frequency);
+void DrawScenery(std::vector<Scenery>& listOfScenery);
 void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed);
 
 

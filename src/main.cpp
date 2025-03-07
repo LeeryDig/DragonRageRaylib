@@ -58,9 +58,10 @@ int main() {
     Game game;
     game.distance = 0.0f;
 
-    std::vector<Roads> roads = GenerateRoads(30, -30.0);
-    std::vector<Scenery> buildingsRight = GenerateScenery(15, 10, 50, 10, 0);
-    std::vector<Scenery> buildingsLeft = GenerateScenery(15, 10, 50, 10, 1);
+    std::vector<Roads> roads = GenerateRoads(30);
+    std::vector<Scenery> leftBuildings = GenerateScenery(-4.5, 10, 5);
+    std::vector<Scenery> rightBuildings = GenerateScenery(4.5, 10, 7);
+
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
@@ -104,6 +105,19 @@ int main() {
             car.rotation = Lerp(car.rotation, 0.0f, 0.07f);
         }
 
+        if (IsKeyDown(KEY_E))
+            camera.position.y += 1.1f;
+        else if (IsKeyDown(KEY_Q))
+            camera.position.y -= 1.1f;
+        else if (IsKeyDown(KEY_A))
+            camera.position.x -= 1.1f;
+        else if (IsKeyDown(KEY_D))
+            camera.position.x += 1.1f;
+        else if (IsKeyDown(KEY_S))
+            camera.position.z -= 1.1f;
+        else if (IsKeyDown(KEY_W))
+            camera.position.z += 1.1f;
+
         // Draw
         BeginDrawing();
 
@@ -112,12 +126,9 @@ int main() {
         BeginMode3D(camera);
         DrawModelEx(car.model, car.position, car.axis, car.rotation, car.size, WHITE);
         DrawCube(Vector3{0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
-
-        UpdateScenery(buildingsLeft, car.velocity);
-        DrawScenery(buildingsLeft, game.distance);
-        UpdateScenery(buildingsRight, car.velocity);
-        DrawScenery(buildingsRight, game.distance);
-
+        // UpdateScenery()
+        DrawScenery(leftBuildings);
+        DrawScenery(rightBuildings);
         UpdateRoads(roads, car.velocity);
         DrawRoads(roads);
 

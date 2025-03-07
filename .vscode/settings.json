@@ -68,7 +68,8 @@
         "queue": "cpp",
         "ratio": "cpp",
         "sstream": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "iostream": "cpp"
     },
     "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: Google, IndentWidth: 4, ColumnLimit: 0}"
 }
