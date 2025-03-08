@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-std::vector<Scenery> GenerateScenery(float xPos, float total, float frequency) {
+std::vector<Scenery> GenerateScenery(float xPos, int total, float frequency) {
     std::vector<Scenery> listOfScenery;
 
     Model model = LoadModel("resources/models/Building.glb");
@@ -16,7 +16,7 @@ std::vector<Scenery> GenerateScenery(float xPos, float total, float frequency) {
         Scenery scenery;
         scenery.model = model;      
         scenery.position = Vector3{xPos, 0.0, zPos};
-        zPos = length + frequency;
+        zPos += length + frequency;
         listOfScenery.push_back(scenery);
     }
     return listOfScenery;
@@ -33,24 +33,18 @@ void DrawScenery(std::vector<Scenery>& scenery) {
 void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed) {
     for (size_t i = 0; i < listOfScenery.size(); i++)
     {
+        if (listOfScenery[i].position.z >= 20) {
+            listOfScenery[i].position.z = -30.0;
+        }
+
+        listOfScenery[i].position.z += (speed * 5) * GetFrameTime();
+
         float distance = Vector3Distance(listOfScenery[i].position, Vector3{0.0, 0.0, 0.0});
-        listOfScenery[i].position.z += speed * GetFrameTime();
+        float maxDistance = 40.0f; 
     
-        float scaleFactor = 1.0f / (1.0f + distance * 0.1f);
+        float scaleFactor = 1.0f - (distance / maxDistance);
+        scaleFactor = fmaxf(0.0f, fminf(scaleFactor, 1.0f));
     
         listOfScenery[i].scale = scaleFactor;
-    }
-    
-
-    for (auto& object : listOfScenery) {
-        if (object.position.z >= 20.0f) {
-            float lastObjectZ = listOfScenery[0].position.z;
-            for (const auto& o : listOfScenery) {
-                if (o.position.z < lastObjectZ) {
-                    lastObjectZ = o.position.z;
-                }
-            }
-            object.position.z = lastObjectZ ;
-        }
     }
 }

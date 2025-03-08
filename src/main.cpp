@@ -15,6 +15,8 @@ SysState sysState = SysState::PLAYING;
 const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
 
+std::vector<Scenery> allScenery;
+
 struct Car {
     Model model;
     Vector3 cameraPos;
@@ -34,9 +36,20 @@ float FuelConsume(float velocity, float consumption) {
     return velocity * consumption;
 }
 
+
+void LoadAllScenery(std::vector<Scenery> objects) {
+    for (size_t i = 0; i < objects.size(); i++)
+    {
+        allScenery.push_back(objects[i]);
+    }
+}
+
+std::vector<Scenery> leftBuildings = GenerateScenery(-5.0, 10, 3.0);
+std::vector<Scenery> rightBuildings = GenerateScenery(5.0, 10, 3.5);
+
 int main() {
     InitWindow(SCRWIDTH, SCRHEIGHT, "SPEED");
-
+    
     Car car;
     car.position = {0.0f, 0.1f, 0.0f};
     car.size = {1.0f, 1.0f, 1.0f};
@@ -52,16 +65,15 @@ int main() {
     car.crusingSpeed = 0.55;
     car.velocity = 0.85;
     car.cameraPos = {0.0f, 0.22f, 0.1f};
-
+    
     Camera camera = {car.cameraPos, Vector3{0.0f, 0.4f, -1.0f}, Vector3{0.0f, 1.0f, 0.0f}, 50.0f, 0};
+
+    std::vector<Roads> roads = GenerateRoads(30);
+    LoadAllScenery(leftBuildings);
+    LoadAllScenery(rightBuildings);
 
     Game game;
     game.distance = 0.0f;
-
-    std::vector<Roads> roads = GenerateRoads(30);
-    std::vector<Scenery> leftBuildings = GenerateScenery(-4.5, 10, 5);
-    std::vector<Scenery> rightBuildings = GenerateScenery(4.5, 10, 7);
-
 
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
@@ -120,16 +132,17 @@ int main() {
 
         // Draw
         BeginDrawing();
-
+        
         ClearBackground(RAYWHITE);
+        
+        UpdateScenery(allScenery, car.velocity);
+        UpdateRoads(roads, car.velocity);
 
         BeginMode3D(camera);
+
         DrawModelEx(car.model, car.position, car.axis, car.rotation, car.size, WHITE);
         DrawCube(Vector3{0.0, 0.0, 0.0}, 100, 0.0, 100, DARKGREEN);
-        // UpdateScenery()
-        DrawScenery(leftBuildings);
-        DrawScenery(rightBuildings);
-        UpdateRoads(roads, car.velocity);
+        DrawScenery(allScenery);
         DrawRoads(roads);
 
         EndMode3D();
