@@ -12,7 +12,7 @@ struct Roads {
 
 std::vector<Roads> GenerateRoads(int total);
 
-void DrawRoads(std::vector<Roads>& roads);
+void DrawRoads(const std::vector<Roads>& roads);
 
 void UpdateRoads(std::vector<Roads>& roads, float speed);
 

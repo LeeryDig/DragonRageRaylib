@@ -10,7 +10,7 @@ std::vector<Roads> GenerateRoads(int total) {
     float zPos = -30.0;
     float length = bbox.max.z - bbox.min.z;
 
-    for (size_t i = 0; i < total; i++) {
+    for (std::size_t i = 0; i < total; i++) {
         Roads road;
         road.model = model;
         road.position = (Vector3){0.0, 0.001, zPos};
@@ -21,7 +21,7 @@ std::vector<Roads> GenerateRoads(int total) {
     return roads;
 }
 
-void DrawRoads(std::vector<Roads>& roads) {
+void DrawRoads(const std::vector<Roads>& roads) {
     for (const auto& road : roads) {
         DrawModel(road.model, road.position, 1.0, WHITE);
     }

@@ -1,0 +1,9 @@
+services:
+  build-windows:
+    build:
+      context: .
+      dockerfile: Dockerfile.windows-build
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: ["bash", "scripts/build_windows.sh"]

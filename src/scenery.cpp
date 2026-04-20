@@ -12,7 +12,7 @@ std::vector<Scenery> GenerateScenery(float xPos, int total, float frequency) {
     float zPos = -30.0;
     float length = bbox.max.z - bbox.min.z;
     
-    for (size_t i = 0; i < total; i++) {
+    for (std::size_t i = 0; i < total; i++) {
         Scenery scenery;
         scenery.model = model;      
         scenery.position = Vector3{xPos, 0.0, zPos};
@@ -22,8 +22,8 @@ std::vector<Scenery> GenerateScenery(float xPos, int total, float frequency) {
     return listOfScenery;
 }
 
-void DrawScenery(std::vector<Scenery>& scenery) {
-    for (size_t i = 0; i < scenery.size(); i++)
+void DrawScenery(const std::vector<Scenery>& scenery) {
+    for (std::size_t i = 0; i < scenery.size(); i++)
     {
         DrawModel(scenery[i].model, scenery[i].position, scenery[i].scale, WHITE);
     }
@@ -31,7 +31,7 @@ void DrawScenery(std::vector<Scenery>& scenery) {
 }
 
 void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed) {
-    for (size_t i = 0; i < listOfScenery.size(); i++)
+    for (std::size_t i = 0; i < listOfScenery.size(); i++)
     {
         if (listOfScenery[i].position.z >= 20) {
             listOfScenery[i].position.z = -30.0;

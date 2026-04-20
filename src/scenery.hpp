@@ -12,7 +12,7 @@ struct Scenery {
 };
 
 std::vector<Scenery> GenerateScenery(float xPos, int total, float frequency);
-void DrawScenery(std::vector<Scenery>& listOfScenery);
+void DrawScenery(const std::vector<Scenery>& listOfScenery);
 void UpdateScenery(std::vector<Scenery>& listOfScenery, float speed);
 
 

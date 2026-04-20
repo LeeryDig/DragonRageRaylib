@@ -1,0 +1,11 @@
+{
+  "cockpit": {
+    "position": [0.0, 0.22, 0.10],
+    "target": [0.0, 0.40, -1.0],
+    "fovy": 50.0
+  },
+  "debug": {
+    "moveSpeed": 8.0,
+    "lookSensitivity": 0.003
+  }
+}

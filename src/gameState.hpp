@@ -4,6 +4,7 @@
 enum class SysState {
     EDITOR,
     MENU,
+    OPTIONS,
     PLAYING,
     PAUSED
 };
