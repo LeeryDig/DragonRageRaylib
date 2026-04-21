@@ -98,19 +98,34 @@ DebugCameraState LoadDebugCameraStateConfig(
     return loadedState;
 }
 
-Camera CreateCockpitCamera(const Vector3& anchorPosition, const CockpitCameraConfig& config) {
+Camera CreateCockpitCamera(
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const CockpitCameraConfig& config) {
     Camera camera = {};
-    camera.position = Vector3Add(anchorPosition, config.positionOffset);
-    camera.target = Vector3Add(anchorPosition, config.targetOffset);
+    camera.position = Vector3Add(
+        anchorPosition,
+        Vector3RotateByQuaternion(config.positionOffset, anchorRotation));
+    camera.target = Vector3Add(
+        anchorPosition,
+        Vector3RotateByQuaternion(config.targetOffset, anchorRotation));
     camera.up = Vector3{0.0f, 1.0f, 0.0f};
     camera.fovy = config.fovy;
     camera.projection = CAMERA_PERSPECTIVE;
     return camera;
 }
 
-void ApplyCockpitCamera(Camera& camera, const Vector3& anchorPosition, const CockpitCameraConfig& config) {
-    camera.position = Vector3Add(anchorPosition, config.positionOffset);
-    camera.target = Vector3Add(anchorPosition, config.targetOffset);
+void ApplyCockpitCamera(
+    Camera& camera,
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const CockpitCameraConfig& config) {
+    camera.position = Vector3Add(
+        anchorPosition,
+        Vector3RotateByQuaternion(config.positionOffset, anchorRotation));
+    camera.target = Vector3Add(
+        anchorPosition,
+        Vector3RotateByQuaternion(config.targetOffset, anchorRotation));
     camera.up = Vector3{0.0f, 1.0f, 0.0f};
     camera.fovy = config.fovy;
     camera.projection = CAMERA_PERSPECTIVE;

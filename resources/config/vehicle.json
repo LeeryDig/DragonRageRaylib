@@ -1,0 +1,38 @@
+{
+  "fixed_time_step": 0.004166667,
+  "mass": 50.0,
+  "engine_power": 18.0,
+  "downhill_multiplier": 1.3,
+  "brake_power": 25.0,
+  "tire_turn_speed": 1.3,
+  "tire_max_turn_degrees": 35.0,
+  "grip_power": 10.0,
+  "grip_front": 0.9,
+  "grip_rear": 1.0,
+  "grip_drift_front": 0.9,
+  "grip_drift_rear": 0.9,
+  "air_pitch_torque": 0.2,
+  "extra_gravity": 12.0,
+  "wall_penalty_multiplier": 0.8,
+  "wall_spin_damping": 0.5,
+  "ground_linear_damp": 0.1,
+  "collider_size": [2.0, 0.5, 4.0],
+  "center_of_mass": [0.0, 0.0, 0.0],
+  "wheel_offsets": [
+    [-0.75, 0.0, -1.25],
+    [0.75, 0.0, -1.25],
+    [-0.75, 0.0, 1.25],
+    [0.75, 0.0, 1.25]
+  ],
+  "max_turn_curve": [
+    [0.0, 1.0],
+    [50.0, 0.4],
+    [100.0, 0.2],
+    [200.0, 0.1],
+    [300.0, 0.05]
+  ],
+  "drag_curve": [
+    [0.0, 0.0],
+    [200.0, 5.0]
+  ]
+}

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Backend Service Workbench"
+  short_description: "Desenvolver backend com fluxo, testes e entrega"
+  default_prompt: "Use $backend-service-workbench para inspecionar este backend, implementar a mudanca no lugar certo, adicionar validacoes e testes e fechar com checklist de entrega."
+policy:
+  allow_implicit_invocation: true

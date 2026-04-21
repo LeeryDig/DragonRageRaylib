@@ -1,0 +1,6 @@
+interface:
+  display_name: "Python MVP Architecture Guardian"
+  short_description: "Arquitetura Python simples para MVP"
+  default_prompt: "Use $python-project-architecture-guardian para definir uma arquitetura Python simples para este projeto, registrar o contrato arquitetural e manter o backend enxuto e evolutivo."
+policy:
+  allow_implicit_invocation: true

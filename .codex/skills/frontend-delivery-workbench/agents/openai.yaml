@@ -1,0 +1,6 @@
+interface:
+  display_name: "Frontend Delivery Workbench"
+  short_description: "Desenvolver frontend com fluxo, UX e verificacao"
+  default_prompt: "Use $frontend-delivery-workbench para inspecionar este frontend, implementar a mudanca no lugar certo, alinhar arquitetura e design e fechar com verificacao de responsividade e entrega."
+policy:
+  allow_implicit_invocation: true

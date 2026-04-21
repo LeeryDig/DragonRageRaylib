@@ -1,0 +1,4 @@
+interface:
+  display_name: "Test Coverage Audit"
+  short_description: "Audita testes e cobertura do repositorio"
+  default_prompt: "Audite testes e cobertura do repositorio, rode os comandos reais existentes, habilite cobertura com mudanca minima quando necessario e gere relatorio em test_reports/."

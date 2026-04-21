@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Guardian"
+  short_description: "Organiza, valida e padroniza a documentacao"
+  default_prompt: "Revise e organize a documentacao do repositorio com foco em estrutura, indice e consistencia com o codigo existente."

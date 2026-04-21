@@ -1,0 +1,11 @@
+interface:
+  display_name: "Playwright QA Auditor"
+  short_description: "Auditar uma funcionalidade com Playwright MCP"
+  default_prompt: "Use $playwright-feature-qa-auditor para validar uma funcionalidade especifica com Playwright MCP e registrar a auditoria local no projeto."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "playwright"
+      description: "Playwright MCP server for browser QA execution"
+policy:
+  allow_implicit_invocation: true

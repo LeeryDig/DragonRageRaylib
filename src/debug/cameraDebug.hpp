@@ -27,9 +27,16 @@ DebugCameraState LoadDebugCameraStateConfig(
     const std::string& filePath,
     const DebugCameraState& fallbackState);
 
-Camera CreateCockpitCamera(const Vector3& anchorPosition, const CockpitCameraConfig& config);
+Camera CreateCockpitCamera(
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const CockpitCameraConfig& config);
 
-void ApplyCockpitCamera(Camera& camera, const Vector3& anchorPosition, const CockpitCameraConfig& config);
+void ApplyCockpitCamera(
+    Camera& camera,
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const CockpitCameraConfig& config);
 
 void SyncDebugCameraRotation(DebugCameraState& debugCamera, const Camera& camera);
 

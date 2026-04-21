@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gap Hunter"
+  short_description: "Audita gaps e corrige com testes e relatorio"
+  default_prompt: "Use $gap-hunter para auditar a aplicacao, corrigir gaps e validar tudo com testes."

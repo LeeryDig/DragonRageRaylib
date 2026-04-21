@@ -1,0 +1,6 @@
+interface:
+  display_name: "PRD Product Planner"
+  short_description: "Planejar produto a partir de PRD e fases"
+  default_prompt: "Use $prd-product-development-planner para ler o PRD do projeto e montar um plano de desenvolvimento do produto com fases, checklist de verificacao e rotinas de gerente de projeto."
+policy:
+  allow_implicit_invocation: true

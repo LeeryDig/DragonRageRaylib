@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Audit"
+  short_description: "Audita implementacoes recentes e corrige gaps"
+  default_prompt: "Faca um double check da implementacao recente, rode validacoes existentes no repositorio, corrija gaps ate tudo ficar verde e gere relatorio em audit_logs/."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Diagram Mermaid"
+  short_description: "Gera diagramas Mermaid coerentes"
+  default_prompt: "Analise o repositorio inteiro e gere ou atualize diagramas Mermaid em docs/diagrams/, preserve docs/db/ para artefatos de banco, valide a sintaxe e atualize docs/indice.md com os links."

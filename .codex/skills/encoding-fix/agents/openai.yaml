@@ -1,0 +1,4 @@
+interface:
+  display_name: "Encoding Fix (Mojibake Hunter)"
+  short_description: "Corrige mojibake e padroniza UTF-8 no repo"
+  default_prompt: "Use $encoding-fix para encontrar e corrigir problemas de encoding/mojibake e gerar relatorio versionado."

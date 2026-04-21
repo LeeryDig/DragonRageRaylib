@@ -1,0 +1,4 @@
+interface:
+  display_name: "Execution Orchestrator"
+  short_description: "Track PRD execution and audit closure"
+  default_prompt: "Use $execution-orchestration-governor to manage PRD execution states, revalidation gates, and audit closure across the repository."

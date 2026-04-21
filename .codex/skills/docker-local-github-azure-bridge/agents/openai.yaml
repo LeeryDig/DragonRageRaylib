@@ -1,0 +1,6 @@
+interface:
+  display_name: "Docker GitHub Azure Bridge"
+  short_description: "Docker local com ponte para GitHub e Azure"
+  default_prompt: "Use $docker-local-github-azure-bridge para recomendar e, apos minha confirmacao, configurar Docker local do projeto e preparar a entrega para GitHub e Azure em alinhamento com a skill de Terraform."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Style Guide Conformance"
+  short_description: "Confrontar o frontend com o Style guide oficial"
+  default_prompt: "Use $frontend-styleguide-conformance para auditar este frontend inteiro contra o Style guide oficial, identificar drifts visuais e estruturais e devolver gaps acionaveis com referencias de arquivo."

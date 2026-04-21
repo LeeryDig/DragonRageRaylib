@@ -1,0 +1,15 @@
+# Project-local Codex settings.
+# max_depth = 2 lets @audit delegate to @frontend/@backend/@qa in one run.
+
+[features]
+multi_agent = true
+
+[agents]
+max_threads = 4
+max_depth = 2
+
+[mcp_servers.playwright]
+command = "cmd.exe"
+# Route Playwright through a local wrapper that rejects headless runs.
+args = ["/c", ".codex\\scripts\\playwright-mcp-visible.cmd"]
+startup_timeout_ms = 30000

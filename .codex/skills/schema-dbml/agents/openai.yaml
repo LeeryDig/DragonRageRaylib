@@ -1,0 +1,4 @@
+interface:
+  display_name: "Schema DBML"
+  short_description: "Gera e valida schema DBML real"
+  default_prompt: "Analise o repositorio inteiro, garanta docs/diagrams/ e docs/db/, gere ou atualize docs/db/schema.dbml com base em fontes reais, valide consistencia de tabelas e refs, gere relatorio em docs/db e atualize docs/indice.md."

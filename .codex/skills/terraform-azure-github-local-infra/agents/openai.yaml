@@ -1,0 +1,6 @@
+interface:
+  display_name: "Terraform Azure Local Infra"
+  short_description: "Montar infra local com Terraform, Azure e GitHub"
+  default_prompt: "Use $terraform-azure-github-local-infra para recomendar e, apos minha confirmacao, implementar a infraestrutura local do projeto com Terraform, Azure via az login e integracao com GitHub."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Git Delivery Audit Publisher"
+  short_description: "Auditar alteracoes Git e conduzir add, commit e push com seguranca."
+  default_prompt: "Use $git-delivery-audit-publisher para auditar as alteracoes reais do repositorio, registrar a auditoria localmente e conduzir git add, commit e git push com seguranca."
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Python Unit Test Workbench"
+  short_description: "Criar e validar testes unitarios Python, com escalonamento para aceitacao quando necessario."
+  default_prompt: "Use $python-unit-test-workbench para criar ou atualizar testes unitarios Python e, se o pedido for de aceitacao, encaminhar para Playwright."
+policy:
+  allow_implicit_invocation: true

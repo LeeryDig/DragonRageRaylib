@@ -1,0 +1,4 @@
+interface:
+  display_name: "Componentize Loop"
+  short_description: "Componentiza em loop e valida tudo"
+  default_prompt: "Refatore arquivos grandes em componentes menores e reutilizaveis, em iteracoes pequenas, mantendo comportamento e repetindo ate lint/test/build ficarem verdes."
