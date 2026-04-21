@@ -2,6 +2,8 @@ build/
 dist/
 .cmake/
 
+SimpleRacingGame/
+
 # Prerequisites
 *.d
 
