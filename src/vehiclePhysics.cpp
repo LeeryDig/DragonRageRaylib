@@ -289,6 +289,7 @@ VehicleConfig DefaultVehicleConfig() {
     config.wallPenaltyMultiplier = 0.8f;
     config.wallSpinDamping = 0.5f;
     config.groundLinearDamp = 0.1f;
+    config.angularDamp = 1.5f;
     config.colliderSize = Vector3{2.0f, 0.5f, 4.0f};
     config.centerOfMass = Vector3Zero();
     config.wheelOffsets = {
@@ -349,6 +350,7 @@ VehicleConfig LoadVehicleConfig(
         json, "wall_spin_damping", fallbackConfig.wallSpinDamping);
     config.groundLinearDamp = ExtractFloat(
         json, "ground_linear_damp", fallbackConfig.groundLinearDamp);
+    config.angularDamp = ExtractFloat(json, "angular_damp", fallbackConfig.angularDamp);
     config.colliderSize = ExtractVector3(json, "collider_size", fallbackConfig.colliderSize);
     config.centerOfMass = ExtractVector3(json, "center_of_mass", fallbackConfig.centerOfMass);
     config.wheelOffsets = ExtractWheelOffsets(json, "wheel_offsets", fallbackConfig.wheelOffsets);
@@ -417,10 +419,10 @@ void StepVehiclePhysics(
                     -maxTurnRadians,
                     maxTurnRadians);
             } else {
-                state.wheelSteerAngles[i] = Lerp(
+                state.wheelSteerAngles[i] = MoveTowardsScalar(
                     state.wheelSteerAngles[i],
                     0.0f,
-                    Clamp(config.tireTurnSpeed * deltaTime, 0.0f, 1.0f));
+                    config.tireTurnSpeed * deltaTime);
             }
         } else {
             state.wheelSteerAngles[i] = 0.0f;
@@ -497,6 +499,9 @@ void StepVehiclePhysics(
         float dampFactor = 1.0f / (1.0f + config.groundLinearDamp * deltaTime);
         state.linearVelocity = Vector3Scale(state.linearVelocity, dampFactor);
     }
+
+    float angularDampFactor = 1.0f / (1.0f + config.angularDamp * deltaTime);
+    state.angularVelocity = Vector3Scale(state.angularVelocity, angularDampFactor);
 
     state.position = Vector3Add(state.position, Vector3Scale(state.linearVelocity, deltaTime));
     IntegrateOrientation(state, deltaTime);

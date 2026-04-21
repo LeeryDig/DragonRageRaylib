@@ -30,6 +30,7 @@ struct VehicleConfig {
     float wallPenaltyMultiplier;
     float wallSpinDamping;
     float groundLinearDamp;
+    float angularDamp;
     Vector3 colliderSize;
     Vector3 centerOfMass;
     std::array<Vector3, 4> wheelOffsets;
