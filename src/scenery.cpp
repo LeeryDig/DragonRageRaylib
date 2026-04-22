@@ -1,12 +1,15 @@
 #include "scenery.hpp"
+#include "utils.hpp"
 
 #include <iostream>
 
 std::vector<Scenery> GenerateScenery(float xPos, int total, float frequency) {
     std::vector<Scenery> listOfScenery;
 
-    Model model = LoadModel("resources/models/Building.glb");
-    Texture2D objectTexture = LoadTexture("resources/textures/Building.png");
+    std::string modelPath = Utils::ResolveProjectPath("resources/models/Building.glb");
+    std::string texturePath = Utils::ResolveProjectPath("resources/textures/Building.png");
+    Model model = LoadModel(modelPath.c_str());
+    Texture2D objectTexture = LoadTexture(texturePath.c_str());
     SetMaterialTexture(&model.materials[0], MATERIAL_MAP_DIFFUSE, objectTexture);
     BoundingBox bbox = GetModelBoundingBox(model);
     float zPos = -30.0;

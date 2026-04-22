@@ -5,6 +5,8 @@
 #define PI 3.14159265358979323846f
 #endif
 
+#include <string>
+#include <raylib.h>
 #include <raymath.h>
 
 #include <vector>
@@ -19,6 +21,28 @@ class Utils {
         return "(" + std::to_string(vec.x) + ", " +
                std::to_string(vec.y) + ", " +
                std::to_string(vec.z) + ")";
+    }
+
+    static std::string ResolveProjectPath(const std::string& relativePath) {
+        if (FileExists(relativePath.c_str()) || DirectoryExists(relativePath.c_str())) {
+            return relativePath;
+        }
+
+        const char* appDir = GetApplicationDirectory();
+        std::string appBase = appDir != nullptr ? std::string(appDir) : std::string();
+        std::string candidates[] = {
+            appBase + "/" + relativePath,
+            appBase + "/../" + relativePath,
+            appBase + "/../../" + relativePath
+        };
+
+        for (std::size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); ++i) {
+            if (FileExists(candidates[i].c_str()) || DirectoryExists(candidates[i].c_str())) {
+                return candidates[i];
+            }
+        }
+
+        return relativePath;
     }
 };
 

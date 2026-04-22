@@ -50,11 +50,13 @@ struct VehicleState {
     Vector3 linearVelocity;
     Vector3 angularVelocity;
     std::array<float, 4> wheelSteerAngles;
+    std::array<bool, 4> wheelSupported;
     std::array<Vector3, 4> wheelEngineForces;
     std::array<Vector3, 4> wheelGripForces;
     std::array<Vector3, 4> wheelDragBrakeForces;
     Vector3 previousLinearVelocity;
     float speedKph;
+    int supportedWheelCount;
     bool grounded;
     bool drifting;
 };

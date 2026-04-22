@@ -12,6 +12,7 @@
 #include "physics/physicsWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
 #include "staticWorld.hpp"
+#include "utils.hpp"
 #include "vehiclePhysics.hpp"
 
 SysState sysState = SysState::PLAYING;
@@ -45,6 +46,8 @@ struct GameWorld {
     float physicsAccumulator;
 };
 
+void RefreshWheelSupport(GameWorld& gameWorld);
+
 physics::Transform3D BuildTransform(const Vector3& position, const Quaternion& rotation) {
     physics::Transform3D transform = physics::Transform3D::Identity();
     transform.position = position;
@@ -62,8 +65,36 @@ void SyncVehicleStateFromBody(VehicleState& vehicle, const physics::RigidBody& b
     vehicle.position = body.GetPosition();
     vehicle.linearVelocity = body.GetLinearVelocity();
     vehicle.angularVelocity = body.GetAngularVelocity();
-    vehicle.grounded = body.IsGrounded();
     vehicle.speedKph = Vector3DotProduct(GetVehicleForward(vehicle), vehicle.linearVelocity) * 3.6f;
+}
+
+void RefreshWheelSupport(GameWorld& gameWorld) {
+    Vector3 roadCenter = GetRoadColliderCenter(gameWorld.world);
+    Vector3 roadSize = GetRoadColliderSize(gameWorld.world);
+    float roadTopY = roadCenter.y + roadSize.y * 0.5f;
+    float roadMinX = roadCenter.x - roadSize.x * 0.5f;
+    float roadMaxX = roadCenter.x + roadSize.x * 0.5f;
+    float roadMinZ = roadCenter.z - roadSize.z * 0.5f;
+    float roadMaxZ = roadCenter.z + roadSize.z * 0.5f;
+    const float wheelReach = 0.45f;
+    const float wheelBelowTolerance = 0.08f;
+
+    gameWorld.vehicle.supportedWheelCount = 0;
+    for (int i = 0; i < 4; ++i) {
+        Vector3 wheelPosition = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
+        bool withinRoadX = wheelPosition.x >= roadMinX && wheelPosition.x <= roadMaxX;
+        bool withinRoadZ = wheelPosition.z >= roadMinZ && wheelPosition.z <= roadMaxZ;
+        bool withinRoadY =
+            wheelPosition.y >= roadTopY - wheelBelowTolerance &&
+            wheelPosition.y <= roadTopY + wheelReach;
+        bool supported = withinRoadX && withinRoadZ && withinRoadY;
+        gameWorld.vehicle.wheelSupported[i] = supported;
+        if (supported) {
+            ++gameWorld.vehicle.supportedWheelCount;
+        }
+    }
+
+    gameWorld.vehicle.grounded = gameWorld.vehicle.supportedWheelCount > 0;
 }
 
 void ConfigurePhysicsScene(GameWorld& gameWorld) {
@@ -109,6 +140,7 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
     SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
     gameWorld.physicsWorld.Step(0.0f);
     SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+    RefreshWheelSupport(gameWorld);
 }
 
 void DrawForceArrow(Vector3 origin, Vector3 force, float scale, Color color) {
@@ -146,8 +178,10 @@ VehicleInput ReadVehicleInput(bool controlsEnabled) {
 }
 
 void LoadCarVisual(CarVisual& visual) {
-    visual.model = LoadModel("resources/models/CockpitF1.glb");
-    visual.texture = LoadTexture("resources/textures/F1CockpitDiff.png");
+    std::string modelPath = Utils::ResolveProjectPath("resources/models/CockpitF1.glb");
+    std::string texturePath = Utils::ResolveProjectPath("resources/textures/F1CockpitDiff.png");
+    visual.model = LoadModel(modelPath.c_str());
+    visual.texture = LoadTexture(texturePath.c_str());
     visual.scale = Vector3{1.0f, 1.0f, 1.0f};
     SetMaterialTexture(&visual.model.materials[0], MATERIAL_MAP_DIFFUSE, visual.texture);
 }
@@ -164,6 +198,7 @@ void ResetGameWorld(GameWorld& gameWorld) {
         gameWorld.physicsWorld.Step(0.0f);
         SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
     }
+    RefreshWheelSupport(gameWorld);
     gameWorld.debugCamera.enabled = false;
     gameWorld.physicsAccumulator = 0.0f;
     gameWorld.camera = CreateCockpitCamera(
@@ -191,10 +226,16 @@ GameWorld LoadGameWorld() {
     };
 
     gameWorld.world = LoadStaticWorld();
-    gameWorld.vehicleConfig = LoadVehicleConfig(VEHICLE_CONFIG_PATH, DefaultVehicleConfig());
+    gameWorld.vehicleConfig = LoadVehicleConfig(
+        Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
+        DefaultVehicleConfig());
     gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
-    gameWorld.cockpitCamera = LoadCockpitCameraConfig(CAMERA_CONFIG_PATH, fallbackCockpitCamera);
-    gameWorld.debugCamera = LoadDebugCameraStateConfig(CAMERA_CONFIG_PATH, fallbackDebugCamera);
+    gameWorld.cockpitCamera = LoadCockpitCameraConfig(
+        Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
+        fallbackCockpitCamera);
+    gameWorld.debugCamera = LoadDebugCameraStateConfig(
+        Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
+        fallbackDebugCamera);
     ConfigurePhysicsScene(gameWorld);
     LoadCarVisual(gameWorld.visual);
     ResetGameWorld(gameWorld);
@@ -215,7 +256,7 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
-        gameWorld.vehicle.grounded = gameWorld.vehicleBody != nullptr && gameWorld.vehicleBody->IsGrounded();
+        RefreshWheelSupport(gameWorld);
         StepVehiclePhysics(
             gameWorld.vehicle,
             gameWorld.vehicleConfig,
@@ -226,6 +267,7 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
             gameWorld.physicsWorld.Step(0.0f);
             SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
         }
+        RefreshWheelSupport(gameWorld);
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
     }
@@ -252,6 +294,11 @@ void DrawVehicle(const GameWorld& gameWorld) {
         gameWorld.visual.scale,
         WHITE);
 
+    DrawCubeWiresV(
+        gameWorld.vehicle.position,
+        gameWorld.vehicleConfig.colliderSize,
+        SKYBLUE);
+
     for (int i = 0; i < 4; ++i) {
         Vector3 wheelPosition = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
         DrawCubeV(
@@ -270,6 +317,7 @@ void DrawGameplay(const GameWorld& gameWorld) {
     DrawVehicle(gameWorld);
     EndMode3D();
     
+    DrawText("F2 respawn", 20, 95, 20, BLACK);
     DrawText("F1 debug camera", 20, 120, 20, BLACK);
     DrawText(
         gameWorld.debugCamera.enabled ? "Mode: DEBUG CAMERA" : "Mode: COCKPIT",
@@ -317,6 +365,10 @@ int main() {
     GameWorld gameWorld = LoadGameWorld();
 
     while (!WindowShouldClose()) {
+        if (IsKeyPressed(KEY_F2)) {
+            ResetGameWorld(gameWorld);
+        }
+
         if (IsKeyPressed(KEY_F1)) {
             gameWorld.debugCamera.enabled = !gameWorld.debugCamera.enabled;
             if (gameWorld.debugCamera.enabled) {

@@ -1,4 +1,5 @@
 #include "staticWorld.hpp"
+#include "utils.hpp"
 
 #include <cstddef>
 
@@ -10,8 +11,10 @@ StaticWorld LoadStaticWorld() {
     world.roadCenterZ = 1500.0f;
     world.roadThickness = 0.08f;
     world.buildingScale = 1.0f;
-    world.buildingModel = LoadModel("resources/models/Building.glb");
-    world.buildingTexture = LoadTexture("resources/textures/Building.png");
+    std::string buildingModelPath = Utils::ResolveProjectPath("resources/models/Building.glb");
+    std::string buildingTexturePath = Utils::ResolveProjectPath("resources/textures/Building.png");
+    world.buildingModel = LoadModel(buildingModelPath.c_str());
+    world.buildingTexture = LoadTexture(buildingTexturePath.c_str());
     SetMaterialTexture(&world.buildingModel.materials[0], MATERIAL_MAP_DIFFUSE, world.buildingTexture);
 
     float startZ = -40.0f;

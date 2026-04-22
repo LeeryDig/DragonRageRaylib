@@ -257,19 +257,6 @@ void IntegrateOrientation(VehicleState& state, float deltaTime) {
     state.rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, state.rotation));
 }
 
-void StabilizeGroundedVehicle(VehicleState& state) {
-    Vector3 forward = LocalDirectionToWorld(state, Vector3{0.0f, 0.0f, -1.0f});
-    Vector3 flatForward = Vector3Normalize(Vector3{forward.x, 0.0f, forward.z});
-    if (Vector3LengthSqr(flatForward) <= 0.0001f) {
-        flatForward = Vector3{0.0f, 0.0f, -1.0f};
-    }
-
-    float yaw = atan2f(-flatForward.x, -flatForward.z);
-    state.rotation = QuaternionFromEuler(0.0f, yaw, 0.0f);
-    state.angularVelocity.x = 0.0f;
-    state.angularVelocity.z = 0.0f;
-}
-
 }  // namespace
 
 VehicleConfig DefaultVehicleConfig() {
@@ -374,11 +361,13 @@ void ResetVehicleState(VehicleState& state, const VehicleConfig& config) {
     state.linearVelocity = Vector3Zero();
     state.angularVelocity = Vector3Zero();
     state.wheelSteerAngles = {0.0f, 0.0f, 0.0f, 0.0f};
+    state.wheelSupported = {false, false, false, false};
     state.wheelEngineForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelGripForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelDragBrakeForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.previousLinearVelocity = Vector3Zero();
     state.speedKph = 0.0f;
+    state.supportedWheelCount = 0;
     state.grounded = false;
     state.drifting = false;
 }
@@ -392,10 +381,7 @@ void StepVehiclePhysics(
     state.wheelEngineForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelGripForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelDragBrakeForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
-
-    if (state.grounded) {
-        StabilizeGroundedVehicle(state);
-    }
+    state.grounded = state.supportedWheelCount > 0;
 
     state.speedKph = Vector3DotProduct(GetVehicleForward(state), state.linearVelocity) * 3.6f;
 
@@ -424,11 +410,16 @@ void StepVehiclePhysics(
             state.wheelSteerAngles[i] = 0.0f;
         }
 
-        if (!state.grounded) {
+        Vector3 wheelCenter = GetWheelWorldPosition(state, config, i);
+        if (state.wheelSupported[i]) {
+            Vector3 supportForce = Vector3{0.0f, carMassShare * kBaseGravity, 0.0f};
+            ApplyForce(state, config, supportForce, wheelCenter, deltaTime);
+        }
+
+        if (!state.wheelSupported[i]) {
             continue;
         }
 
-        Vector3 wheelCenter = GetWheelWorldPosition(state, config, i);
         Vector3 wheelForward = GetWheelForward(state, i);
         Vector3 wheelRight = GetWheelRight(state, i);
         Vector3 tireVelocity = GetPointVelocity(state, config, wheelCenter);
@@ -487,10 +478,11 @@ void StepVehiclePhysics(
         state.drifting = false;
     }
 
+    state.linearVelocity.y -= kBaseGravity * deltaTime;
     if (!state.grounded) {
         Vector3 pitchTorque = Vector3Scale(GetVehicleRight(state), -config.airPitchTorque * config.mass);
         ApplyTorque(state, config, pitchTorque, deltaTime);
-        state.linearVelocity.y -= (kBaseGravity + config.extraGravity) * deltaTime;
+        state.linearVelocity.y -= config.extraGravity * deltaTime;
     } else {
         float dampFactor = 1.0f / (1.0f + config.groundLinearDamp * deltaTime);
         state.linearVelocity = Vector3Scale(state.linearVelocity, dampFactor);
@@ -501,10 +493,6 @@ void StepVehiclePhysics(
 
     state.position = Vector3Add(state.position, Vector3Scale(state.linearVelocity, deltaTime));
     IntegrateOrientation(state, deltaTime);
-
-    if (state.grounded) {
-        StabilizeGroundedVehicle(state);
-    }
 
     state.speedKph = Vector3DotProduct(GetVehicleForward(state), state.linearVelocity) * 3.6f;
 }

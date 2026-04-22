@@ -1,10 +1,13 @@
 #include "roads.hpp"
+#include "utils.hpp"
 
 std::vector<Roads> GenerateRoads(int total) {
     std::vector<Roads> roads;
 
-    Model model = LoadModel("resources/models/RoadAsphalt.glb");
-    Texture2D roadTexture = LoadTexture("resources/textures/ground/sand_3.png");
+    std::string modelPath = Utils::ResolveProjectPath("resources/models/RoadAsphalt.glb");
+    std::string texturePath = Utils::ResolveProjectPath("resources/textures/ground/sand_3.png");
+    Model model = LoadModel(modelPath.c_str());
+    Texture2D roadTexture = LoadTexture(texturePath.c_str());
     SetMaterialTexture(&model.materials[0], MATERIAL_MAP_DIFFUSE, roadTexture);
     BoundingBox bbox = GetModelBoundingBox(model);
     float zPos = -30.0;

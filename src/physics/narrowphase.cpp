@@ -10,6 +10,8 @@ namespace physics {
 
 namespace {
 
+const float kContactEpsilon = 0.02f;
+
 struct WorldBox {
     Vector3 center;
     Vector3 halfExtents;
@@ -39,9 +41,13 @@ bool ComputeBoxBoxOverlapInternal(
     float overlapY = boxA.halfExtents.y + boxB.halfExtents.y - fabsf(delta.y);
     float overlapZ = boxA.halfExtents.z + boxB.halfExtents.z - fabsf(delta.z);
 
-    if (overlapX <= 0.0f || overlapY <= 0.0f || overlapZ <= 0.0f) {
+    if (overlapX < -kContactEpsilon || overlapY < -kContactEpsilon || overlapZ < -kContactEpsilon) {
         return false;
     }
+
+    overlapX = overlapX < 0.0f ? 0.0f : overlapX;
+    overlapY = overlapY < 0.0f ? 0.0f : overlapY;
+    overlapZ = overlapZ < 0.0f ? 0.0f : overlapZ;
 
     result.point.penetrationDepth = overlapX;
     result.point.normal = Vector3{delta.x >= 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f};
