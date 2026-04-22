@@ -20,5 +20,7 @@ struct StaticWorld {
 StaticWorld LoadStaticWorld();
 void UnloadStaticWorld(StaticWorld& world);
 void DrawStaticWorld(const StaticWorld& world);
+Vector3 GetRoadColliderCenter(const StaticWorld& world);
+Vector3 GetRoadColliderSize(const StaticWorld& world);
 
 #endif

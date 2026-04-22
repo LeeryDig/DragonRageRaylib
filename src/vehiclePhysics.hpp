@@ -44,11 +44,6 @@ struct VehicleInput {
     float steering;
 };
 
-struct WorldCollisionConfig {
-    float groundY;
-    float roadHalfWidth;
-};
-
 struct VehicleState {
     Vector3 position;
     Quaternion rotation;
@@ -78,7 +73,6 @@ void StepVehiclePhysics(
     VehicleState& state,
     const VehicleConfig& config,
     const VehicleInput& input,
-    const WorldCollisionConfig& world,
     float deltaTime);
 
 Vector3 GetVehicleForward(const VehicleState& state);

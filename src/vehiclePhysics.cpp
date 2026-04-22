@@ -257,15 +257,17 @@ void IntegrateOrientation(VehicleState& state, float deltaTime) {
     state.rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, state.rotation));
 }
 
-float GetHorizontalHalfExtent(const VehicleState& state, const VehicleConfig& config) {
-    Vector3 right = GetVehicleRight(state);
-    Vector3 up = GetVehicleUp(state);
-    Vector3 forward = GetVehicleForward(state);
-    Vector3 halfExtents = Vector3Scale(config.colliderSize, 0.5f);
+void StabilizeGroundedVehicle(VehicleState& state) {
+    Vector3 forward = LocalDirectionToWorld(state, Vector3{0.0f, 0.0f, -1.0f});
+    Vector3 flatForward = Vector3Normalize(Vector3{forward.x, 0.0f, forward.z});
+    if (Vector3LengthSqr(flatForward) <= 0.0001f) {
+        flatForward = Vector3{0.0f, 0.0f, -1.0f};
+    }
 
-    return fabsf(right.x) * halfExtents.x +
-           fabsf(up.x) * halfExtents.y +
-           fabsf(forward.x) * halfExtents.z;
+    float yaw = atan2f(-flatForward.x, -flatForward.z);
+    state.rotation = QuaternionFromEuler(0.0f, yaw, 0.0f);
+    state.angularVelocity.x = 0.0f;
+    state.angularVelocity.z = 0.0f;
 }
 
 }  // namespace
@@ -367,7 +369,7 @@ VehicleState CreateVehicleState(const VehicleConfig& config) {
 }
 
 void ResetVehicleState(VehicleState& state, const VehicleConfig& config) {
-    state.position = Vector3{0.0f, config.colliderSize.y * 0.5f, 0.0f};
+    state.position = Vector3{0.0f, config.colliderSize.y * 0.5f + 2.0f, 0.0f};
     state.rotation = QuaternionIdentity();
     state.linearVelocity = Vector3Zero();
     state.angularVelocity = Vector3Zero();
@@ -377,7 +379,7 @@ void ResetVehicleState(VehicleState& state, const VehicleConfig& config) {
     state.wheelDragBrakeForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.previousLinearVelocity = Vector3Zero();
     state.speedKph = 0.0f;
-    state.grounded = true;
+    state.grounded = false;
     state.drifting = false;
 }
 
@@ -385,20 +387,14 @@ void StepVehiclePhysics(
     VehicleState& state,
     const VehicleConfig& config,
     const VehicleInput& input,
-    const WorldCollisionConfig& world,
     float deltaTime) {
     state.previousLinearVelocity = state.linearVelocity;
     state.wheelEngineForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelGripForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
     state.wheelDragBrakeForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
 
-    float halfHeight = config.colliderSize.y * 0.5f;
-    state.grounded = state.position.y <= world.groundY + halfHeight + 0.02f;
-    if (state.grounded && state.position.y < world.groundY + halfHeight) {
-        state.position.y = world.groundY + halfHeight;
-        if (state.linearVelocity.y < 0.0f) {
-            state.linearVelocity.y = 0.0f;
-        }
+    if (state.grounded) {
+        StabilizeGroundedVehicle(state);
     }
 
     state.speedKph = Vector3DotProduct(GetVehicleForward(state), state.linearVelocity) * 3.6f;
@@ -506,42 +502,8 @@ void StepVehiclePhysics(
     state.position = Vector3Add(state.position, Vector3Scale(state.linearVelocity, deltaTime));
     IntegrateOrientation(state, deltaTime);
 
-    if (state.position.y <= world.groundY + halfHeight) {
-        state.position.y = world.groundY + halfHeight;
-        if (state.linearVelocity.y < 0.0f) {
-            state.linearVelocity.y = 0.0f;
-        }
-        state.grounded = true;
-    } else {
-        state.grounded = false;
-    }
-
-    float halfExtentX = GetHorizontalHalfExtent(state, config);
-    bool hitWall = false;
-    Vector3 wallNormal = Vector3Zero();
-    if (state.position.x + halfExtentX > world.roadHalfWidth) {
-        state.position.x = world.roadHalfWidth - halfExtentX;
-        wallNormal = Vector3{-1.0f, 0.0f, 0.0f};
-        hitWall = true;
-    } else if (state.position.x - halfExtentX < -world.roadHalfWidth) {
-        state.position.x = -world.roadHalfWidth + halfExtentX;
-        wallNormal = Vector3{1.0f, 0.0f, 0.0f};
-        hitWall = true;
-    }
-
-    if (hitWall) {
-        float impactVelocity = fabsf(Vector3DotProduct(state.previousLinearVelocity, wallNormal));
-        if (impactVelocity > 0.5f) {
-            Vector3 carForward = GetVehicleForward(state);
-            float currentForwardSpeed = Vector3DotProduct(state.linearVelocity, carForward);
-            float speedReduction = impactVelocity * config.wallPenaltyMultiplier;
-            float newForwardSpeed = MoveTowardsScalar(currentForwardSpeed, 0.0f, speedReduction);
-            float actualReduction = currentForwardSpeed - newForwardSpeed;
-            state.linearVelocity = Vector3Subtract(
-                state.linearVelocity,
-                Vector3Scale(carForward, actualReduction));
-            state.angularVelocity = Vector3Scale(state.angularVelocity, config.wallSpinDamping);
-        }
+    if (state.grounded) {
+        StabilizeGroundedVehicle(state);
     }
 
     state.speedKph = Vector3DotProduct(GetVehicleForward(state), state.linearVelocity) * 3.6f;

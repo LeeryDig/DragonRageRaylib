@@ -39,7 +39,7 @@ void DrawStaticWorld(const StaticWorld& world) {
         DARKGREEN);
 
     DrawCube(
-        Vector3{0.0f, world.groundY - world.roadThickness * 0.5f, world.roadCenterZ},
+        Vector3{0.0f, world.groundY + 0.1f, world.roadCenterZ},
         world.roadHalfWidth * 2.0f,
         world.roadThickness,
         world.roadLength,
@@ -48,7 +48,7 @@ void DrawStaticWorld(const StaticWorld& world) {
     for (int i = 0; i < 100; ++i) {
         float z = static_cast<float>(i) * 28.0f;
         DrawCube(
-            Vector3{0.0f, world.groundY + 0.1f, z},
+            Vector3{0.0f, world.groundY + 0.15f, z},
             0.3f,
             0.01f,
             10.0f,
@@ -58,4 +58,16 @@ void DrawStaticWorld(const StaticWorld& world) {
     for (const Vector3& position : world.buildingPositions) {
         DrawModel(world.buildingModel, position, world.buildingScale, WHITE);
     }
+}
+
+Vector3 GetRoadColliderCenter(const StaticWorld& world) {
+    return Vector3{0.0f, world.groundY + 0.1f, world.roadCenterZ};
+}
+
+Vector3 GetRoadColliderSize(const StaticWorld& world) {
+    return Vector3{
+        world.roadHalfWidth * 2.0f,
+        world.roadThickness,
+        world.roadLength
+    };
 }

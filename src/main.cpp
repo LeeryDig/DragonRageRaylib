@@ -2,10 +2,15 @@
 #include <raymath.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #include "debug/cameraDebug.hpp"
 #include "gameState.hpp"
+#include "physics/collisionLayers.hpp"
+#include "physics/physicsMaterial.hpp"
+#include "physics/physicsWorld.hpp"
+#include "physics/shapes/boxShape.hpp"
 #include "staticWorld.hpp"
 #include "vehiclePhysics.hpp"
 
@@ -28,13 +33,83 @@ struct GameWorld {
     StaticWorld world;
     VehicleConfig vehicleConfig;
     VehicleState vehicle;
-    WorldCollisionConfig collision;
+    physics::PhysicsWorld physicsWorld;
+    physics::RigidBody* vehicleBody;
+    physics::StaticBody* roadBody;
+    std::shared_ptr<const physics::BoxShape> vehicleShape;
+    std::shared_ptr<const physics::BoxShape> roadShape;
     CarVisual visual;
     Camera camera;
     CockpitCameraConfig cockpitCamera;
     DebugCameraState debugCamera;
     float physicsAccumulator;
 };
+
+physics::Transform3D BuildTransform(const Vector3& position, const Quaternion& rotation) {
+    physics::Transform3D transform = physics::Transform3D::Identity();
+    transform.position = position;
+    transform.rotation = rotation;
+    return transform;
+}
+
+void SyncBodyFromVehicleState(physics::RigidBody& body, const VehicleState& vehicle) {
+    body.SetTransform(BuildTransform(vehicle.position, vehicle.rotation));
+    body.SetLinearVelocity(vehicle.linearVelocity);
+    body.SetAngularVelocity(vehicle.angularVelocity);
+}
+
+void SyncVehicleStateFromBody(VehicleState& vehicle, const physics::RigidBody& body) {
+    vehicle.position = body.GetPosition();
+    vehicle.linearVelocity = body.GetLinearVelocity();
+    vehicle.angularVelocity = body.GetAngularVelocity();
+    vehicle.grounded = body.IsGrounded();
+    vehicle.speedKph = Vector3DotProduct(GetVehicleForward(vehicle), vehicle.linearVelocity) * 3.6f;
+}
+
+void ConfigurePhysicsScene(GameWorld& gameWorld) {
+    gameWorld.physicsWorld = physics::PhysicsWorld();
+    gameWorld.physicsWorld.SetGravity(Vector3{0.0f, 0.0f, 0.0f});
+
+    physics::StaticBodyDesc roadDesc;
+    roadDesc.transform = BuildTransform(GetRoadColliderCenter(gameWorld.world), QuaternionIdentity());
+    roadDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::World);
+    roadDesc.defaultMask = physics::ToMask(physics::CollisionLayer::Vehicle);
+    gameWorld.roadBody = gameWorld.physicsWorld.CreateStaticBody(roadDesc);
+
+    gameWorld.roadShape.reset(new physics::BoxShape(GetRoadColliderSize(gameWorld.world)));
+
+    physics::ColliderDesc roadCollider;
+    roadCollider.shape = gameWorld.roadShape;
+    roadCollider.layer = physics::ToMask(physics::CollisionLayer::World);
+    roadCollider.mask = physics::ToMask(physics::CollisionLayer::Vehicle);
+    roadCollider.material.name = "road";
+    roadCollider.material.friction = 1.0f;
+    gameWorld.roadBody->AddCollider(roadCollider);
+
+    physics::RigidBodyDesc vehicleDesc;
+    vehicleDesc.transform = BuildTransform(gameWorld.vehicle.position, gameWorld.vehicle.rotation);
+    vehicleDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::Vehicle);
+    vehicleDesc.defaultMask = physics::ToMask(physics::CollisionLayer::World);
+    vehicleDesc.mass = gameWorld.vehicleConfig.mass;
+    vehicleDesc.gravityScale = 0.0f;
+    vehicleDesc.linearDamp = 0.0f;
+    vehicleDesc.angularDamp = 0.0f;
+    gameWorld.vehicleBody = gameWorld.physicsWorld.CreateRigidBody(vehicleDesc);
+
+    gameWorld.vehicleShape.reset(new physics::BoxShape(gameWorld.vehicleConfig.colliderSize));
+
+    physics::ColliderDesc vehicleCollider;
+    vehicleCollider.shape = gameWorld.vehicleShape;
+    vehicleCollider.layer = physics::ToMask(physics::CollisionLayer::Vehicle);
+    vehicleCollider.mask = physics::ToMask(physics::CollisionLayer::World);
+    vehicleCollider.material.name = "car";
+    vehicleCollider.material.friction = 0.8f;
+    gameWorld.vehicleBody->AddCollider(vehicleCollider);
+
+    SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
+    gameWorld.physicsWorld.Step(0.0f);
+    SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+}
 
 void DrawForceArrow(Vector3 origin, Vector3 force, float scale, Color color) {
     if (Vector3LengthSqr(force) <= 0.0001f) {
@@ -84,6 +159,11 @@ void UnloadCarVisual(CarVisual& visual) {
 
 void ResetGameWorld(GameWorld& gameWorld) {
     ResetVehicleState(gameWorld.vehicle, gameWorld.vehicleConfig);
+    if (gameWorld.vehicleBody != nullptr) {
+        SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
+        gameWorld.physicsWorld.Step(0.0f);
+        SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+    }
     gameWorld.debugCamera.enabled = false;
     gameWorld.physicsAccumulator = 0.0f;
     gameWorld.camera = CreateCockpitCamera(
@@ -94,6 +174,8 @@ void ResetGameWorld(GameWorld& gameWorld) {
 
 GameWorld LoadGameWorld() {
     GameWorld gameWorld = {};
+    gameWorld.vehicleBody = nullptr;
+    gameWorld.roadBody = nullptr;
 
     CockpitCameraConfig fallbackCockpitCamera = {
         Vector3{0.0f, 0.22f, 0.1f},
@@ -111,12 +193,9 @@ GameWorld LoadGameWorld() {
     gameWorld.world = LoadStaticWorld();
     gameWorld.vehicleConfig = LoadVehicleConfig(VEHICLE_CONFIG_PATH, DefaultVehicleConfig());
     gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
-    gameWorld.collision = WorldCollisionConfig{
-        gameWorld.world.groundY,
-        gameWorld.world.roadHalfWidth
-    };
     gameWorld.cockpitCamera = LoadCockpitCameraConfig(CAMERA_CONFIG_PATH, fallbackCockpitCamera);
     gameWorld.debugCamera = LoadDebugCameraStateConfig(CAMERA_CONFIG_PATH, fallbackDebugCamera);
+    ConfigurePhysicsScene(gameWorld);
     LoadCarVisual(gameWorld.visual);
     ResetGameWorld(gameWorld);
 
@@ -136,12 +215,17 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
+        gameWorld.vehicle.grounded = gameWorld.vehicleBody != nullptr && gameWorld.vehicleBody->IsGrounded();
         StepVehiclePhysics(
             gameWorld.vehicle,
             gameWorld.vehicleConfig,
             input,
-            gameWorld.collision,
             physicsStep);
+        if (gameWorld.vehicleBody != nullptr) {
+            SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
+            gameWorld.physicsWorld.Step(0.0f);
+            SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+        }
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
     }
@@ -185,11 +269,7 @@ void DrawGameplay(const GameWorld& gameWorld) {
     DrawStaticWorld(gameWorld.world);
     DrawVehicle(gameWorld);
     EndMode3D();
-
-    DrawText("W accelerate", 20, 20, 20, BLACK);
-    DrawText("S brake", 20, 45, 20, BLACK);
-    DrawText("A/D steer", 20, 70, 20, BLACK);
-    DrawText("Space brake assist", 20, 95, 20, BLACK);
+    
     DrawText("F1 debug camera", 20, 120, 20, BLACK);
     DrawText(
         gameWorld.debugCamera.enabled ? "Mode: DEBUG CAMERA" : "Mode: COCKPIT",
