@@ -11,6 +11,13 @@ struct CockpitCameraConfig {
     float fovy;
 };
 
+struct ChaseCameraConfig {
+    float distance;
+    float height;
+    float verticalStiffness;
+    float fovy;
+};
+
 struct DebugCameraState {
     bool enabled;
     float moveSpeed;
@@ -22,6 +29,10 @@ struct DebugCameraState {
 CockpitCameraConfig LoadCockpitCameraConfig(
     const std::string& filePath,
     const CockpitCameraConfig& fallbackConfig);
+
+ChaseCameraConfig LoadChaseCameraConfig(
+    const std::string& filePath,
+    const ChaseCameraConfig& fallbackConfig);
 
 DebugCameraState LoadDebugCameraStateConfig(
     const std::string& filePath,
@@ -37,6 +48,18 @@ void ApplyCockpitCamera(
     const Vector3& anchorPosition,
     const Quaternion& anchorRotation,
     const CockpitCameraConfig& config);
+
+Camera CreateChaseCamera(
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const ChaseCameraConfig& config);
+
+void ApplyChaseCamera(
+    Camera& camera,
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const ChaseCameraConfig& config,
+    float deltaTime);
 
 void SyncDebugCameraRotation(DebugCameraState& debugCamera, const Camera& camera);
 

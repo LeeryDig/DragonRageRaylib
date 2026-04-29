@@ -1,9 +1,16 @@
 #include <raylib.h>
 #include <raymath.h>
+#include <rlgl.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <ctime>
+#include <fstream>
+#include <iomanip>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include "debug/cameraDebug.hpp"
 #include "gameState.hpp"
@@ -41,12 +48,112 @@ struct GameWorld {
     std::shared_ptr<const physics::BoxShape> roadShape;
     CarVisual visual;
     Camera camera;
-    CockpitCameraConfig cockpitCamera;
+    ChaseCameraConfig chaseCamera;
     DebugCameraState debugCamera;
     float physicsAccumulator;
+    float logElapsedSeconds;
+    unsigned int logFrameIndex;
+    std::vector<std::string> vehicleLogLines;
 };
 
-void RefreshWheelSupport(GameWorld& gameWorld);
+std::string FormatVector3(const Vector3& value) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(4)
+           << "(" << value.x << ", " << value.y << ", " << value.z << ")";
+    return stream.str();
+}
+
+std::string FormatQuaternion(const Quaternion& value) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(4)
+           << "(" << value.x << ", " << value.y << ", " << value.z << ", " << value.w << ")";
+    return stream.str();
+}
+
+std::string BuildVehicleLogPath() {
+    std::time_t now = std::time(nullptr);
+    std::tm* localTime = std::localtime(&now);
+
+    char fileName[64] = {};
+    if (localTime != nullptr) {
+        std::strftime(fileName, sizeof(fileName), "vehicle_state_%Y%m%d_%H%M%S.log", localTime);
+    } else {
+        std::snprintf(fileName, sizeof(fileName), "vehicle_state.log");
+    }
+
+    return Utils::ResolveWritableProjectPath(fileName);
+}
+
+void AppendVehicleLogSnapshot(GameWorld& gameWorld) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(4);
+    stream << "frame=" << gameWorld.logFrameIndex
+           << " time=" << gameWorld.logElapsedSeconds
+           << " grounded=" << (gameWorld.vehicle.grounded ? "true" : "false")
+           << " drifting=" << (gameWorld.vehicle.drifting ? "true" : "false")
+           << " speed_kph=" << gameWorld.vehicle.speedKph
+           << " avg_front_steer_deg=" << GetAverageFrontSteerDegrees(gameWorld.vehicle)
+           << " position=" << FormatVector3(gameWorld.vehicle.position)
+           << " rotation=" << FormatQuaternion(gameWorld.vehicle.rotation)
+           << " scale=" << FormatVector3(gameWorld.visual.scale)
+           << " linear_velocity=" << FormatVector3(gameWorld.vehicle.linearVelocity)
+           << " angular_velocity=" << FormatVector3(gameWorld.vehicle.angularVelocity)
+           << " previous_linear_velocity=" << FormatVector3(gameWorld.vehicle.previousLinearVelocity)
+           << " forward=" << FormatVector3(GetVehicleForward(gameWorld.vehicle))
+           << " right=" << FormatVector3(GetVehicleRight(gameWorld.vehicle))
+           << " up=" << FormatVector3(GetVehicleUp(gameWorld.vehicle))
+           << " wheel_steer_deg=["
+           << gameWorld.vehicle.wheelSteerAngles[0] * RAD2DEG << ", "
+           << gameWorld.vehicle.wheelSteerAngles[1] * RAD2DEG << ", "
+           << gameWorld.vehicle.wheelSteerAngles[2] * RAD2DEG << ", "
+           << gameWorld.vehicle.wheelSteerAngles[3] * RAD2DEG << "]"
+           << " wheel_world_pos=["
+           << FormatVector3(GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, 0)) << ", "
+           << FormatVector3(GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, 1)) << ", "
+           << FormatVector3(GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, 2)) << ", "
+           << FormatVector3(GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, 3)) << "]"
+           << " wheel_engine_forces=["
+           << FormatVector3(gameWorld.vehicle.wheelEngineForces[0]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelEngineForces[1]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelEngineForces[2]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelEngineForces[3]) << "]"
+           << " wheel_grip_forces=["
+           << FormatVector3(gameWorld.vehicle.wheelGripForces[0]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelGripForces[1]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelGripForces[2]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelGripForces[3]) << "]"
+           << " wheel_drag_brake_forces=["
+           << FormatVector3(gameWorld.vehicle.wheelDragBrakeForces[0]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelDragBrakeForces[1]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelDragBrakeForces[2]) << ", "
+           << FormatVector3(gameWorld.vehicle.wheelDragBrakeForces[3]) << "]";
+    gameWorld.vehicleLogLines.push_back(stream.str());
+    ++gameWorld.logFrameIndex;
+}
+
+void FlushVehicleLog(const GameWorld& gameWorld) {
+    std::string logPath = BuildVehicleLogPath();
+    std::ofstream logFile(logPath.c_str(), std::ios::out | std::ios::trunc);
+    if (!logFile.is_open()) {
+        return;
+    }
+
+    logFile << "DragonRage vehicle state log\n";
+    logFile << "samples=" << gameWorld.vehicleLogLines.size() << "\n";
+    logFile << "collider_size=" << FormatVector3(gameWorld.vehicleConfig.colliderSize) << "\n";
+    logFile << "center_of_mass=" << FormatVector3(gameWorld.vehicleConfig.centerOfMass) << "\n";
+    logFile << "visual_scale=" << FormatVector3(gameWorld.visual.scale) << "\n";
+    logFile << "wheel_offsets=["
+            << FormatVector3(gameWorld.vehicleConfig.wheelOffsets[0]) << ", "
+            << FormatVector3(gameWorld.vehicleConfig.wheelOffsets[1]) << ", "
+            << FormatVector3(gameWorld.vehicleConfig.wheelOffsets[2]) << ", "
+            << FormatVector3(gameWorld.vehicleConfig.wheelOffsets[3]) << "]\n";
+    logFile << "\n";
+
+    for (std::size_t i = 0; i < gameWorld.vehicleLogLines.size(); ++i) {
+        logFile << gameWorld.vehicleLogLines[i] << "\n";
+    }
+}
 
 physics::Transform3D BuildTransform(const Vector3& position, const Quaternion& rotation) {
     physics::Transform3D transform = physics::Transform3D::Identity();
@@ -63,38 +170,11 @@ void SyncBodyFromVehicleState(physics::RigidBody& body, const VehicleState& vehi
 
 void SyncVehicleStateFromBody(VehicleState& vehicle, const physics::RigidBody& body) {
     vehicle.position = body.GetPosition();
+    vehicle.rotation = body.GetTransform().rotation;
     vehicle.linearVelocity = body.GetLinearVelocity();
     vehicle.angularVelocity = body.GetAngularVelocity();
+    vehicle.grounded = body.IsGrounded();
     vehicle.speedKph = Vector3DotProduct(GetVehicleForward(vehicle), vehicle.linearVelocity) * 3.6f;
-}
-
-void RefreshWheelSupport(GameWorld& gameWorld) {
-    Vector3 roadCenter = GetRoadColliderCenter(gameWorld.world);
-    Vector3 roadSize = GetRoadColliderSize(gameWorld.world);
-    float roadTopY = roadCenter.y + roadSize.y * 0.5f;
-    float roadMinX = roadCenter.x - roadSize.x * 0.5f;
-    float roadMaxX = roadCenter.x + roadSize.x * 0.5f;
-    float roadMinZ = roadCenter.z - roadSize.z * 0.5f;
-    float roadMaxZ = roadCenter.z + roadSize.z * 0.5f;
-    const float wheelReach = 0.45f;
-    const float wheelBelowTolerance = 0.08f;
-
-    gameWorld.vehicle.supportedWheelCount = 0;
-    for (int i = 0; i < 4; ++i) {
-        Vector3 wheelPosition = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-        bool withinRoadX = wheelPosition.x >= roadMinX && wheelPosition.x <= roadMaxX;
-        bool withinRoadZ = wheelPosition.z >= roadMinZ && wheelPosition.z <= roadMaxZ;
-        bool withinRoadY =
-            wheelPosition.y >= roadTopY - wheelBelowTolerance &&
-            wheelPosition.y <= roadTopY + wheelReach;
-        bool supported = withinRoadX && withinRoadZ && withinRoadY;
-        gameWorld.vehicle.wheelSupported[i] = supported;
-        if (supported) {
-            ++gameWorld.vehicle.supportedWheelCount;
-        }
-    }
-
-    gameWorld.vehicle.grounded = gameWorld.vehicle.supportedWheelCount > 0;
 }
 
 void ConfigurePhysicsScene(GameWorld& gameWorld) {
@@ -140,7 +220,6 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
     SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
     gameWorld.physicsWorld.Step(0.0f);
     SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
-    RefreshWheelSupport(gameWorld);
 }
 
 void DrawForceArrow(Vector3 origin, Vector3 force, float scale, Color color) {
@@ -198,23 +277,27 @@ void ResetGameWorld(GameWorld& gameWorld) {
         gameWorld.physicsWorld.Step(0.0f);
         SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
     }
-    RefreshWheelSupport(gameWorld);
     gameWorld.debugCamera.enabled = false;
     gameWorld.physicsAccumulator = 0.0f;
-    gameWorld.camera = CreateCockpitCamera(
+    gameWorld.camera = CreateChaseCamera(
         gameWorld.vehicle.position,
         gameWorld.vehicle.rotation,
-        gameWorld.cockpitCamera);
+        gameWorld.chaseCamera);
+    gameWorld.vehicleLogLines.push_back("---- reset ----");
+    AppendVehicleLogSnapshot(gameWorld);
 }
 
 GameWorld LoadGameWorld() {
     GameWorld gameWorld = {};
     gameWorld.vehicleBody = nullptr;
     gameWorld.roadBody = nullptr;
+    gameWorld.logElapsedSeconds = 0.0f;
+    gameWorld.logFrameIndex = 0;
 
-    CockpitCameraConfig fallbackCockpitCamera = {
-        Vector3{0.0f, 0.22f, 0.1f},
-        Vector3{0.0f, 0.4f, -1.0f},
+    ChaseCameraConfig fallbackChaseCamera = {
+        3.5f,
+        1.0f,
+        25.0f,
         50.0f
     };
     DebugCameraState fallbackDebugCamera = {
@@ -230,9 +313,9 @@ GameWorld LoadGameWorld() {
         Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
         DefaultVehicleConfig());
     gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
-    gameWorld.cockpitCamera = LoadCockpitCameraConfig(
+    gameWorld.chaseCamera = LoadChaseCameraConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
-        fallbackCockpitCamera);
+        fallbackChaseCamera);
     gameWorld.debugCamera = LoadDebugCameraStateConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
         fallbackDebugCamera);
@@ -245,6 +328,7 @@ GameWorld LoadGameWorld() {
 
 void UnloadGameWorld(GameWorld& gameWorld) {
     EnableCursor();
+    FlushVehicleLog(gameWorld);
     UnloadCarVisual(gameWorld.visual);
     UnloadStaticWorld(gameWorld.world);
 }
@@ -252,11 +336,12 @@ void UnloadGameWorld(GameWorld& gameWorld) {
 void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     float physicsStep = gameWorld.vehicleConfig.fixedTimeStep;
     gameWorld.physicsAccumulator += frameDelta;
+    gameWorld.logElapsedSeconds += frameDelta;
 
     VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
-        RefreshWheelSupport(gameWorld);
+        gameWorld.vehicle.grounded = gameWorld.vehicleBody != nullptr && gameWorld.vehicleBody->IsGrounded();
         StepVehiclePhysics(
             gameWorld.vehicle,
             gameWorld.vehicleConfig,
@@ -267,7 +352,6 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
             gameWorld.physicsWorld.Step(0.0f);
             SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
         }
-        RefreshWheelSupport(gameWorld);
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
     }
@@ -275,36 +359,79 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     if (gameWorld.debugCamera.enabled) {
         UpdateDebugCamera(gameWorld.debugCamera, gameWorld.camera);
     } else {
-        ApplyCockpitCamera(
+        ApplyChaseCamera(
             gameWorld.camera,
             gameWorld.vehicle.position,
             gameWorld.vehicle.rotation,
-            gameWorld.cockpitCamera);
+            gameWorld.chaseCamera,
+            frameDelta);
     }
+
+    AppendVehicleLogSnapshot(gameWorld);
 }
 
 void DrawVehicle(const GameWorld& gameWorld) {
-    float yawDegrees = GetVehicleYawDegrees(gameWorld.vehicle);
+    Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
+    float rotationAngle = 0.0f;
+    QuaternionToAxisAngle(gameWorld.vehicle.rotation, &rotationAxis, &rotationAngle);
 
-    DrawModelEx(
-        gameWorld.visual.model,
-        gameWorld.vehicle.position,
-        Vector3{0.0f, 1.0f, 0.0f},
-        yawDegrees,
-        gameWorld.visual.scale,
-        WHITE);
+    rlPushMatrix();
+    rlTranslatef(
+        gameWorld.vehicle.position.x,
+        gameWorld.vehicle.position.y,
+        gameWorld.vehicle.position.z);
+    rlRotatef(
+        rotationAngle * RAD2DEG,
+        rotationAxis.x,
+        rotationAxis.y,
+        rotationAxis.z);
+    rlScalef(
+        gameWorld.visual.scale.x,
+        gameWorld.visual.scale.y,
+        gameWorld.visual.scale.z);
 
+    DrawModel(gameWorld.visual.model, Vector3Zero(), 1.0f, WHITE);
+
+    for (int i = 0; i < 4; ++i) {
+        rlPushMatrix();
+        rlTranslatef(
+            gameWorld.vehicleConfig.wheelOffsets[i].x,
+            gameWorld.vehicleConfig.wheelOffsets[i].y,
+            gameWorld.vehicleConfig.wheelOffsets[i].z);
+        if (i < 2) {
+            rlRotatef(
+                gameWorld.vehicle.wheelSteerAngles[i] * RAD2DEG,
+                0.0f,
+                1.0f,
+                0.0f);
+        }
+        DrawCubeV(
+            Vector3Zero(),
+            Vector3{0.2f, 0.2f, 0.2f},
+            i < 2 ? RED : ORANGE);
+        rlPopMatrix();
+    }
+
+    rlPopMatrix();
+
+    rlPushMatrix();
+    rlTranslatef(
+        gameWorld.vehicle.position.x,
+        gameWorld.vehicle.position.y,
+        gameWorld.vehicle.position.z);
+    rlRotatef(
+        rotationAngle * RAD2DEG,
+        rotationAxis.x,
+        rotationAxis.y,
+        rotationAxis.z);
     DrawCubeWiresV(
-        gameWorld.vehicle.position,
+        Vector3Zero(),
         gameWorld.vehicleConfig.colliderSize,
         SKYBLUE);
+    rlPopMatrix();
 
     for (int i = 0; i < 4; ++i) {
         Vector3 wheelPosition = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-        DrawCubeV(
-            wheelPosition,
-            Vector3{0.2f, 0.2f, 0.2f},
-            i < 2 ? RED : ORANGE);
         DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelEngineForces[i], 0.015f, RED);
         DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelGripForces[i], 0.02f, YELLOW);
         DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelDragBrakeForces[i], 0.02f, ORANGE);
@@ -320,7 +447,7 @@ void DrawGameplay(const GameWorld& gameWorld) {
     DrawText("F2 respawn", 20, 95, 20, BLACK);
     DrawText("F1 debug camera", 20, 120, 20, BLACK);
     DrawText(
-        gameWorld.debugCamera.enabled ? "Mode: DEBUG CAMERA" : "Mode: COCKPIT",
+        gameWorld.debugCamera.enabled ? "Mode: DEBUG CAMERA" : "Mode: CHASE",
         20,
         155,
         20,
@@ -376,11 +503,12 @@ int main() {
                 SyncDebugCameraRotation(gameWorld.debugCamera, gameWorld.camera);
             } else {
                 EnableCursor();
-                ApplyCockpitCamera(
+                ApplyChaseCamera(
                     gameWorld.camera,
                     gameWorld.vehicle.position,
                     gameWorld.vehicle.rotation,
-                    gameWorld.cockpitCamera);
+                    gameWorld.chaseCamera,
+                    1.0f / 60.0f);
             }
         }
 

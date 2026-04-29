@@ -15,6 +15,18 @@ Vector3 DampVelocity(const Vector3& velocity, float damp, float deltaTime) {
     return Vector3Scale(velocity, factor);
 }
 
+Quaternion IntegrateRotation(const Quaternion& rotation, const Vector3& angularVelocity, float deltaTime) {
+    float angularSpeed = Vector3Length(angularVelocity);
+    if (angularSpeed <= 0.0001f) {
+        return rotation;
+    }
+
+    Quaternion deltaRotation = QuaternionFromAxisAngle(
+        Vector3Scale(angularVelocity, 1.0f / angularSpeed),
+        angularSpeed * deltaTime);
+    return QuaternionNormalize(QuaternionMultiply(deltaRotation, rotation));
+}
+
 }  // namespace
 
 RigidBody::RigidBody(std::size_t idIn, const RigidBodyDesc& desc)
@@ -41,6 +53,7 @@ void RigidBody::StepMotion(float deltaTime, const Vector3& gravity) {
     angularVelocity = DampVelocity(angularVelocity, angularDamp, deltaTime);
 
     transform.position = Vector3Add(transform.position, Vector3Scale(linearVelocity, deltaTime));
+    transform.rotation = IntegrateRotation(transform.rotation, angularVelocity, deltaTime);
 
     ClearAccumulators();
 }

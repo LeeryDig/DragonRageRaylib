@@ -57,6 +57,10 @@ Vector3 BuildForwardVector(float yaw, float pitch) {
     });
 }
 
+Vector3 BuildAnchorForward(const Quaternion& anchorRotation) {
+    return Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, anchorRotation));
+}
+
 }  // namespace
 
 CockpitCameraConfig LoadCockpitCameraConfig(
@@ -74,6 +78,28 @@ CockpitCameraConfig LoadCockpitCameraConfig(
 
     loadedConfig.positionOffset = ExtractVector3(json, "position", fallbackConfig.positionOffset);
     loadedConfig.targetOffset = ExtractVector3(json, "target", fallbackConfig.targetOffset);
+    loadedConfig.fovy = ExtractFloat(json, "fovy", fallbackConfig.fovy);
+
+    return loadedConfig;
+}
+
+ChaseCameraConfig LoadChaseCameraConfig(
+    const std::string& filePath,
+    const ChaseCameraConfig& fallbackConfig) {
+    ChaseCameraConfig loadedConfig = fallbackConfig;
+
+    char* rawFileContents = LoadFileText(filePath.c_str());
+    if (rawFileContents == nullptr) {
+        return loadedConfig;
+    }
+
+    std::string json = rawFileContents;
+    UnloadFileText(rawFileContents);
+
+    loadedConfig.distance = ExtractFloat(json, "distance", fallbackConfig.distance);
+    loadedConfig.height = ExtractFloat(json, "height", fallbackConfig.height);
+    loadedConfig.verticalStiffness = ExtractFloat(
+        json, "verticalStiffness", fallbackConfig.verticalStiffness);
     loadedConfig.fovy = ExtractFloat(json, "fovy", fallbackConfig.fovy);
 
     return loadedConfig;
@@ -126,6 +152,49 @@ void ApplyCockpitCamera(
     camera.target = Vector3Add(
         anchorPosition,
         Vector3RotateByQuaternion(config.targetOffset, anchorRotation));
+    camera.up = Vector3{0.0f, 1.0f, 0.0f};
+    camera.fovy = config.fovy;
+    camera.projection = CAMERA_PERSPECTIVE;
+}
+
+Camera CreateChaseCamera(
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const ChaseCameraConfig& config) {
+    Camera camera = {};
+    Vector3 forward = BuildAnchorForward(anchorRotation);
+    camera.position = Vector3Add(
+        anchorPosition,
+        Vector3Add(Vector3Scale(forward, -config.distance), Vector3{0.0f, config.height, 0.0f}));
+    camera.target = anchorPosition;
+    camera.up = Vector3{0.0f, 1.0f, 0.0f};
+    camera.fovy = config.fovy;
+    camera.projection = CAMERA_PERSPECTIVE;
+    return camera;
+}
+
+void ApplyChaseCamera(
+    Camera& camera,
+    const Vector3& anchorPosition,
+    const Quaternion& anchorRotation,
+    const ChaseCameraConfig& config,
+    float deltaTime) {
+    Vector3 fromTarget = Vector3Subtract(camera.position, anchorPosition);
+    fromTarget.y = 0.0f;
+
+    if (Vector3LengthSqr(fromTarget) <= 0.0001f) {
+        fromTarget = Vector3Scale(BuildAnchorForward(anchorRotation), -config.distance);
+    } else {
+        fromTarget = Vector3Scale(Vector3Normalize(fromTarget), config.distance);
+    }
+
+    Vector3 targetPosition = Vector3Add(anchorPosition, fromTarget);
+    float desiredY = anchorPosition.y + config.height;
+    float yLerp = Clamp(config.verticalStiffness * deltaTime, 0.0f, 1.0f);
+    targetPosition.y = Lerp(camera.position.y, desiredY, yLerp);
+
+    camera.position = targetPosition;
+    camera.target = anchorPosition;
     camera.up = Vector3{0.0f, 1.0f, 0.0f};
     camera.fovy = config.fovy;
     camera.projection = CAMERA_PERSPECTIVE;

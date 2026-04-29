@@ -1,4 +1,10 @@
 {
+  "chase": {
+    "distance": 3.5,
+    "height": 1.0,
+    "verticalStiffness": 25.0,
+    "fovy": 50.0
+  },
   "cockpit": {
     "position": [0.0, 0.40, 1.20],
     "target": [0.0, 0.32, -2.20],

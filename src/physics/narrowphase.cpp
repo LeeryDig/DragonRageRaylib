@@ -11,72 +11,118 @@ namespace physics {
 namespace {
 
 const float kContactEpsilon = 0.02f;
+const float kParallelAxisThreshold = 0.0001f;
 
-struct WorldBox {
+struct OrientedWorldBox {
     Vector3 center;
     Vector3 halfExtents;
+    Vector3 axes[3];
 };
 
 bool IsBoxShape(const Collider& collider) {
     return collider.GetShape() && collider.GetShape()->GetType() == ShapeType::Box;
 }
 
-WorldBox BuildWorldBox(const Transform3D& ownerTransform, const Collider& collider) {
+OrientedWorldBox BuildWorldBox(const Transform3D& ownerTransform, const Collider& collider) {
     const BoxShape* boxShape = static_cast<const BoxShape*>(collider.GetShape().get());
 
-    WorldBox box = {};
-    box.center = Vector3Add(ownerTransform.position, collider.GetLocalTransform().position);
+    OrientedWorldBox box = {};
+    box.center = Vector3Add(
+        ownerTransform.position,
+        Vector3RotateByQuaternion(collider.GetLocalTransform().position, ownerTransform.rotation));
     box.halfExtents = Vector3Scale(boxShape->size, 0.5f);
+    box.axes[0] = Vector3Normalize(Vector3RotateByQuaternion(Vector3{1.0f, 0.0f, 0.0f}, ownerTransform.rotation));
+    box.axes[1] = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 1.0f, 0.0f}, ownerTransform.rotation));
+    box.axes[2] = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, 1.0f}, ownerTransform.rotation));
     return box;
 }
 
-bool ComputeBoxBoxOverlapInternal(
-    const WorldBox& boxA,
-    const Vector3& velocityA,
-    const WorldBox& boxB,
-    const Vector3& velocityB,
-    OverlapResult& result) {
-    Vector3 delta = Vector3Subtract(boxB.center, boxA.center);
-    float overlapX = boxA.halfExtents.x + boxB.halfExtents.x - fabsf(delta.x);
-    float overlapY = boxA.halfExtents.y + boxB.halfExtents.y - fabsf(delta.y);
-    float overlapZ = boxA.halfExtents.z + boxB.halfExtents.z - fabsf(delta.z);
+float ProjectBoxOntoAxis(const OrientedWorldBox& box, const Vector3& axis) {
+    return
+        box.halfExtents.x * fabsf(Vector3DotProduct(box.axes[0], axis)) +
+        box.halfExtents.y * fabsf(Vector3DotProduct(box.axes[1], axis)) +
+        box.halfExtents.z * fabsf(Vector3DotProduct(box.axes[2], axis));
+}
 
-    if (overlapX < -kContactEpsilon || overlapY < -kContactEpsilon || overlapZ < -kContactEpsilon) {
+bool TestSeparationAxis(
+    const OrientedWorldBox& boxA,
+    const OrientedWorldBox& boxB,
+    const Vector3& centerDelta,
+    const Vector3& axis,
+    float& minOverlap,
+    Vector3& bestAxis) {
+    float axisLengthSqr = Vector3LengthSqr(axis);
+    if (axisLengthSqr <= kParallelAxisThreshold) {
+        return true;
+    }
+
+    Vector3 normalizedAxis = Vector3Scale(axis, 1.0f / sqrtf(axisLengthSqr));
+    float distance = fabsf(Vector3DotProduct(centerDelta, normalizedAxis));
+    float radiusA = ProjectBoxOntoAxis(boxA, normalizedAxis);
+    float radiusB = ProjectBoxOntoAxis(boxB, normalizedAxis);
+    float overlap = radiusA + radiusB - distance;
+    if (overlap < -kContactEpsilon) {
         return false;
     }
 
-    overlapX = overlapX < 0.0f ? 0.0f : overlapX;
-    overlapY = overlapY < 0.0f ? 0.0f : overlapY;
-    overlapZ = overlapZ < 0.0f ? 0.0f : overlapZ;
-
-    result.point.penetrationDepth = overlapX;
-    result.point.normal = Vector3{delta.x >= 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f};
-    result.point.position = Vector3{
-        boxA.center.x + result.point.normal.x * boxA.halfExtents.x,
-        boxA.center.y,
-        boxA.center.z
-    };
-
-    if (overlapY < result.point.penetrationDepth) {
-        result.point.penetrationDepth = overlapY;
-        result.point.normal = Vector3{0.0f, delta.y >= 0.0f ? 1.0f : -1.0f, 0.0f};
-        result.point.position = Vector3{
-            boxA.center.x,
-            boxA.center.y + result.point.normal.y * boxA.halfExtents.y,
-            boxA.center.z
-        };
+    overlap = overlap < 0.0f ? 0.0f : overlap;
+    if (overlap < minOverlap) {
+        minOverlap = overlap;
+        bestAxis = normalizedAxis;
+        if (Vector3DotProduct(centerDelta, bestAxis) < 0.0f) {
+            bestAxis = Vector3Negate(bestAxis);
+        }
     }
 
-    if (overlapZ < result.point.penetrationDepth) {
-        result.point.penetrationDepth = overlapZ;
-        result.point.normal = Vector3{0.0f, 0.0f, delta.z >= 0.0f ? 1.0f : -1.0f};
-        result.point.position = Vector3{
-            boxA.center.x,
-            boxA.center.y,
-            boxA.center.z + result.point.normal.z * boxA.halfExtents.z
-        };
+    return true;
+}
+
+Vector3 GetSupportPoint(const OrientedWorldBox& box, const Vector3& direction) {
+    Vector3 point = box.center;
+    float halfExtents[3] = {box.halfExtents.x, box.halfExtents.y, box.halfExtents.z};
+    for (int i = 0; i < 3; ++i) {
+        float sign = Vector3DotProduct(box.axes[i], direction) >= 0.0f ? 1.0f : -1.0f;
+        point = Vector3Add(point, Vector3Scale(box.axes[i], halfExtents[i] * sign));
+    }
+    return point;
+}
+
+bool ComputeBoxBoxOverlapInternal(
+    const OrientedWorldBox& boxA,
+    const Vector3& velocityA,
+    const OrientedWorldBox& boxB,
+    const Vector3& velocityB,
+    OverlapResult& result) {
+    Vector3 centerDelta = Vector3Subtract(boxB.center, boxA.center);
+    float minOverlap = INFINITY;
+    Vector3 bestAxis = Vector3{0.0f, 1.0f, 0.0f};
+
+    for (int i = 0; i < 3; ++i) {
+        if (!TestSeparationAxis(boxA, boxB, centerDelta, boxA.axes[i], minOverlap, bestAxis)) {
+            return false;
+        }
     }
 
+    for (int i = 0; i < 3; ++i) {
+        if (!TestSeparationAxis(boxA, boxB, centerDelta, boxB.axes[i], minOverlap, bestAxis)) {
+            return false;
+        }
+    }
+
+    for (int axisA = 0; axisA < 3; ++axisA) {
+        for (int axisB = 0; axisB < 3; ++axisB) {
+            Vector3 crossAxis = Vector3CrossProduct(boxA.axes[axisA], boxB.axes[axisB]);
+            if (!TestSeparationAxis(boxA, boxB, centerDelta, crossAxis, minOverlap, bestAxis)) {
+                return false;
+            }
+        }
+    }
+
+    Vector3 supportA = GetSupportPoint(boxA, bestAxis);
+    Vector3 supportB = GetSupportPoint(boxB, Vector3Negate(bestAxis));
+    result.point.penetrationDepth = minOverlap;
+    result.point.normal = bestAxis;
+    result.point.position = Vector3Scale(Vector3Add(supportA, supportB), 0.5f);
     result.point.relativeVelocity = Vector3Subtract(velocityA, velocityB);
     return true;
 }
@@ -93,8 +139,8 @@ bool ComputeBodyBoxOverlap(
         return false;
     }
 
-    WorldBox boxA = BuildWorldBox(bodyA.GetTransform(), colliderA);
-    WorldBox boxB = BuildWorldBox(bodyB.GetTransform(), colliderB);
+    OrientedWorldBox boxA = BuildWorldBox(bodyA.GetTransform(), colliderA);
+    OrientedWorldBox boxB = BuildWorldBox(bodyB.GetTransform(), colliderB);
     return ComputeBoxBoxOverlapInternal(
         boxA,
         bodyA.GetLinearVelocity(),
@@ -113,8 +159,8 @@ bool ComputeTriggerBodyBoxOverlap(
         return false;
     }
 
-    WorldBox triggerBox = BuildWorldBox(trigger.GetTransform(), triggerCollider);
-    WorldBox bodyBox = BuildWorldBox(body.GetTransform(), bodyCollider);
+    OrientedWorldBox triggerBox = BuildWorldBox(trigger.GetTransform(), triggerCollider);
+    OrientedWorldBox bodyBox = BuildWorldBox(body.GetTransform(), bodyCollider);
     return ComputeBoxBoxOverlapInternal(
         triggerBox,
         Vector3{0.0f, 0.0f, 0.0f},

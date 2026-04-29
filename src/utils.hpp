@@ -44,6 +44,31 @@ class Utils {
 
         return relativePath;
     }
+
+    static std::string ResolveProjectRootPath() {
+        if (DirectoryExists("resources")) {
+            return ".";
+        }
+
+        const char* appDir = GetApplicationDirectory();
+        std::string appBase = appDir != nullptr ? std::string(appDir) : std::string();
+        std::string candidates[] = {
+            appBase + "/..",
+            appBase + "/../.."
+        };
+
+        for (std::size_t i = 0; i < sizeof(candidates)/sizeof(candidates[0]); ++i) {
+            if (DirectoryExists((candidates[i] + "/resources").c_str())) {
+                return candidates[i];
+            }
+        }
+
+        return ".";
+    }
+
+    static std::string ResolveWritableProjectPath(const std::string& relativePath) {
+        return ResolveProjectRootPath() + "/" + relativePath;
+    }
 };
 
 #endif
