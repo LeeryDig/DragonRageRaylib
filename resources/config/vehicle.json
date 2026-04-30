@@ -17,6 +17,10 @@
   "wall_spin_damping": 0.5,
   "ground_linear_damp": 0.1,
   "angular_damp": 1.5,
+  "suspension_rest_length": 0.8,
+  "suspension_ray_length": 1.15,
+  "suspension_strength": 650.0,
+  "suspension_damping": 90.0,
   "collider_size": [1.5, 0.5, 3.5],
   "center_of_mass": [0.0, 0.0, 0.0],
   "wheel_offsets": [

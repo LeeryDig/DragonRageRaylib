@@ -3,6 +3,7 @@
 #include <rlgl.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 #include <fstream>
@@ -185,6 +186,83 @@ Vector3 GetPointVelocity(const VehicleState& vehicle, const Vector3& point) {
         Vector3CrossProduct(vehicle.angularVelocity, offset));
 }
 
+float MoveTowardsScalar(float value, float target, float maxDelta) {
+    if (fabsf(target - value) <= maxDelta) {
+        return target;
+    }
+    return value + (target > value ? maxDelta : -maxDelta);
+}
+
+float SampleCurve(const std::vector<CurvePoint>& curve, float x) {
+    if (curve.empty()) {
+        return 0.0f;
+    }
+    if (x <= curve.front().x) {
+        return curve.front().y;
+    }
+    for (std::size_t i = 1; i < curve.size(); ++i) {
+        if (x <= curve[i].x) {
+            float segment = curve[i].x - curve[i - 1].x;
+            if (segment <= 0.0f) {
+                return curve[i].y;
+            }
+            float t = (x - curve[i - 1].x) / segment;
+            return Lerp(curve[i - 1].y, curve[i].y, t);
+        }
+    }
+    return curve.back().y;
+}
+
+Vector3 ProjectDirectionOnPlane(const Vector3& direction, const Vector3& normal, const Vector3& fallback) {
+    Vector3 projected = Vector3Subtract(
+        direction,
+        Vector3Scale(normal, Vector3DotProduct(direction, normal)));
+    if (Vector3LengthSqr(projected) <= 0.0001f) {
+        return fallback;
+    }
+    return Vector3Normalize(projected);
+}
+
+Vector3 GetWheelForwardForSteer(const VehicleState& vehicle, int wheelIndex) {
+    Quaternion steerRotation = QuaternionFromAxisAngle(
+        Vector3{0.0f, 1.0f, 0.0f},
+        vehicle.wheelSteerAngles[wheelIndex]);
+    Vector3 localForward = Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, steerRotation);
+    return Vector3Normalize(Vector3RotateByQuaternion(localForward, vehicle.rotation));
+}
+
+Vector3 GetWheelRightForSteer(const VehicleState& vehicle, int wheelIndex) {
+    Quaternion steerRotation = QuaternionFromAxisAngle(
+        Vector3{0.0f, 1.0f, 0.0f},
+        vehicle.wheelSteerAngles[wheelIndex]);
+    Vector3 localRight = Vector3RotateByQuaternion(Vector3{1.0f, 0.0f, 0.0f}, steerRotation);
+    return Vector3Normalize(Vector3RotateByQuaternion(localRight, vehicle.rotation));
+}
+
+void ApplyForceAtPoint(
+    VehicleState& vehicle,
+    const VehicleConfig& config,
+    const Vector3& force,
+    const Vector3& worldPoint,
+    float deltaTime) {
+    Vector3 offset = Vector3Subtract(worldPoint, vehicle.position);
+    Vector3 torque = Vector3CrossProduct(offset, force);
+    Vector3 inertia = GetBoxInertia(config);
+
+    vehicle.linearVelocity = Vector3Add(
+        vehicle.linearVelocity,
+        Vector3Scale(force, deltaTime / config.mass));
+    vehicle.angularVelocity = Vector3Add(
+        vehicle.angularVelocity,
+        Vector3Scale(
+            Vector3{
+                torque.x / inertia.x,
+                torque.y / inertia.y,
+                torque.z / inertia.z
+            },
+            deltaTime));
+}
+
 void IntegrateVehicleTransform(VehicleState& vehicle, float deltaTime) {
     vehicle.position = Vector3Add(
         vehicle.position,
@@ -199,6 +277,129 @@ void IntegrateVehicleTransform(VehicleState& vehicle, float deltaTime) {
         Vector3Scale(vehicle.angularVelocity, 1.0f / angularSpeed),
         angularSpeed * deltaTime);
     vehicle.rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, vehicle.rotation));
+}
+
+int ApplySuspensionRays(GameWorld& gameWorld, float deltaTime) {
+    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
+    int hits = 0;
+
+    gameWorld.vehicle.wheelEngineForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
+
+    for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
+        Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
+        float hitDistance = rayOrigin.y - groundTopY;
+        if (hitDistance < 0.0f || hitDistance > gameWorld.vehicleConfig.suspensionRayLength) {
+            continue;
+        }
+
+        ++hits;
+        float springDistance = gameWorld.vehicleConfig.suspensionRestLength - hitDistance;
+        if (springDistance <= 0.0f) {
+            continue;
+        }
+
+        Vector3 pointVelocity = GetPointVelocity(gameWorld.vehicle, rayOrigin);
+        float relativeVelocity = Vector3DotProduct(Vector3{0.0f, 1.0f, 0.0f}, pointVelocity);
+        float forceMagnitude =
+            springDistance * gameWorld.vehicleConfig.suspensionStrength -
+            relativeVelocity * gameWorld.vehicleConfig.suspensionDamping;
+        if (forceMagnitude <= 0.0f) {
+            continue;
+        }
+
+        Vector3 force = Vector3{0.0f, forceMagnitude, 0.0f};
+        gameWorld.vehicle.wheelEngineForces[i] = force;
+        ApplyForceAtPoint(
+            gameWorld.vehicle,
+            gameWorld.vehicleConfig,
+            force,
+            rayOrigin,
+            deltaTime);
+    }
+
+    return hits;
+}
+
+void ApplyDriveAndSteering(
+    GameWorld& gameWorld,
+    const VehicleInput& input,
+    float deltaTime,
+    bool suspensionContact) {
+    VehicleState& vehicle = gameWorld.vehicle;
+    const VehicleConfig& config = gameWorld.vehicleConfig;
+
+    vehicle.wheelGripForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
+    vehicle.wheelDragBrakeForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
+    vehicle.speedKph = Vector3DotProduct(GetVehicleForward(vehicle), vehicle.linearVelocity) * 3.6f;
+
+    float carMassShare = config.mass / static_cast<float>(config.wheelOffsets.size());
+    for (int i = 0; i < static_cast<int>(config.wheelOffsets.size()); ++i) {
+        bool isFrontWheel = i < 2;
+        bool isPoweredWheel = i >= 2;
+        float steerInput = input.steering * config.tireTurnSpeed;
+
+        if (isFrontWheel) {
+            float steerRatio = SampleCurve(config.maxTurnCurve, fabsf(vehicle.speedKph));
+            float maxTurnRadians = DEG2RAD * config.tireMaxTurnDegrees * steerRatio;
+            if (fabsf(steerInput) > 0.0f) {
+                vehicle.wheelSteerAngles[i] = Clamp(
+                    vehicle.wheelSteerAngles[i] + steerInput * deltaTime,
+                    -maxTurnRadians,
+                    maxTurnRadians);
+            } else {
+                vehicle.wheelSteerAngles[i] = MoveTowardsScalar(
+                    vehicle.wheelSteerAngles[i],
+                    0.0f,
+                    config.tireTurnSpeed * deltaTime);
+            }
+        } else {
+            vehicle.wheelSteerAngles[i] = 0.0f;
+        }
+
+        if (!suspensionContact) {
+            continue;
+        }
+
+        Vector3 wheelCenter = GetWheelWorldPosition(vehicle, config, i);
+        Vector3 wheelForward = ProjectDirectionOnPlane(
+            GetWheelForwardForSteer(vehicle, i),
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{0.0f, 0.0f, -1.0f});
+        Vector3 wheelRight = ProjectDirectionOnPlane(
+            GetWheelRightForSteer(vehicle, i),
+            Vector3{0.0f, 1.0f, 0.0f},
+            Vector3{1.0f, 0.0f, 0.0f});
+        Vector3 pointVelocity = GetPointVelocity(vehicle, wheelCenter);
+        float forwardVelocity = Vector3DotProduct(wheelForward, pointVelocity);
+        float sidewaysVelocity = Vector3DotProduct(wheelRight, pointVelocity);
+
+        if (isPoweredWheel && input.throttle > 0.0f) {
+            Vector3 engineForce = Vector3Scale(
+                wheelForward,
+                input.throttle * config.mass * config.enginePower * 0.5f);
+            vehicle.wheelDragBrakeForces[i] = engineForce;
+            ApplyForceAtPoint(vehicle, config, engineForce, wheelCenter, deltaTime);
+        }
+
+        Vector3 gripForce = Vector3Scale(
+            wheelRight,
+            -sidewaysVelocity * carMassShare * config.gripPower);
+        vehicle.wheelGripForces[i] = gripForce;
+        ApplyForceAtPoint(vehicle, config, gripForce, wheelCenter, deltaTime);
+
+        float drag = SampleCurve(config.dragCurve, fabsf(vehicle.speedKph));
+        Vector3 dragForce = Vector3Scale(
+            wheelForward,
+            -forwardVelocity * carMassShare * drag * 0.02f);
+        Vector3 brakeForce = Vector3Scale(
+            wheelForward,
+            -forwardVelocity * carMassShare * config.brakePower * input.brake * 0.05f);
+        Vector3 dragBrakeForce = Vector3Add(dragForce, brakeForce);
+        vehicle.wheelDragBrakeForces[i] = Vector3Add(
+            vehicle.wheelDragBrakeForces[i],
+            dragBrakeForce);
+        ApplyForceAtPoint(vehicle, config, dragBrakeForce, wheelCenter, deltaTime);
+    }
 }
 
 void ApplyGroundImpulseAtPoint(
@@ -442,13 +643,24 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     gameWorld.physicsAccumulator += frameDelta;
     gameWorld.logElapsedSeconds += frameDelta;
 
+    VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
         gameWorld.vehicle.previousLinearVelocity = gameWorld.vehicle.linearVelocity;
         gameWorld.vehicle.linearVelocity.y -= 9.81f * physicsStep;
+        int suspensionHits = ApplySuspensionRays(gameWorld, physicsStep);
+        ApplyDriveAndSteering(
+            gameWorld,
+            input,
+            physicsStep,
+            suspensionHits > 0);
+        float angularDampFactor = 1.0f / (1.0f + gameWorld.vehicleConfig.angularDamp * physicsStep);
+        gameWorld.vehicle.angularVelocity = Vector3Scale(
+            gameWorld.vehicle.angularVelocity,
+            angularDampFactor);
         IntegrateVehicleTransform(gameWorld.vehicle, physicsStep);
         int groundContacts = ResolveGroundContactsFromShapeVertices(gameWorld);
-        gameWorld.vehicle.grounded = groundContacts > 0;
+        gameWorld.vehicle.grounded = suspensionHits > 0 || groundContacts > 0;
         gameWorld.vehicle.speedKph =
             Vector3DotProduct(GetVehicleForward(gameWorld.vehicle), gameWorld.vehicle.linearVelocity) * 3.6f;
         if (gameWorld.vehicleBody != nullptr) {
@@ -493,6 +705,22 @@ void DrawVehicle(const GameWorld& gameWorld) {
         gameWorld.vehicleConfig.colliderSize,
         BLACK);
     rlPopMatrix();
+
+    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
+    for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
+        Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
+        Vector3 rayEnd = Vector3Add(
+            rayOrigin,
+            Vector3{0.0f, -gameWorld.vehicleConfig.suspensionRayLength, 0.0f});
+        bool hit =
+            rayOrigin.y >= groundTopY &&
+            rayOrigin.y - groundTopY <= gameWorld.vehicleConfig.suspensionRayLength;
+        DrawLine3D(rayOrigin, rayEnd, hit ? GREEN : RED);
+        DrawSphere(rayOrigin, 0.06f, hit ? GREEN : RED);
+        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelEngineForces[i], 0.002f, BLUE);
+        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelGripForces[i], 0.01f, YELLOW);
+        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelDragBrakeForces[i], 0.01f, ORANGE);
+    }
 }
 
 void DrawGameplay(const GameWorld& gameWorld) {
@@ -510,9 +738,15 @@ void DrawGameplay(const GameWorld& gameWorld) {
         20,
         gameWorld.debugCamera.enabled ? MAROON : DARKGREEN);
     DrawText(
-        TextFormat("Velocity Y: %.2f", gameWorld.vehicle.linearVelocity.y),
+        TextFormat("Speed: %d km/h", static_cast<int>(gameWorld.vehicle.speedKph)),
         20,
         180,
+        20,
+        BLACK);
+    DrawText(
+        TextFormat("Velocity Y: %.2f", gameWorld.vehicle.linearVelocity.y),
+        20,
+        205,
         20,
         BLACK);
     DrawText(
@@ -521,7 +755,7 @@ void DrawGameplay(const GameWorld& gameWorld) {
             gameWorld.vehicleConfig.colliderSize.y,
             gameWorld.vehicleConfig.colliderSize.z),
         20,
-        205,
+        230,
         20,
         BLACK);
     DrawText(
@@ -530,17 +764,17 @@ void DrawGameplay(const GameWorld& gameWorld) {
             gameWorld.vehicle.position.y,
             gameWorld.vehicle.position.z),
         20,
-        230,
+        255,
         20,
         BLACK);
     DrawText(
         gameWorld.vehicle.grounded ? "Grounded" : "Airborne",
         20,
-        255,
+        280,
         20,
         gameWorld.vehicle.grounded ? DARKGREEN : RED);
-    DrawText("Test: red rectangle falls and collides with ground", 20, 280, 20, BLACK);
-    DrawFPS(20, 310);
+    DrawText("W/S/A/D drive | Blue=susp Yellow=grip Orange=drive/drag/brake", 20, 305, 20, BLACK);
+    DrawFPS(20, 335);
 }
 
 }  // namespace

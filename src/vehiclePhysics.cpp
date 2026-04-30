@@ -289,6 +289,10 @@ VehicleConfig DefaultVehicleConfig() {
     config.wallSpinDamping = 0.5f;
     config.groundLinearDamp = 0.1f;
     config.angularDamp = 1.5f;
+    config.suspensionRestLength = 0.8f;
+    config.suspensionRayLength = 1.15f;
+    config.suspensionStrength = 650.0f;
+    config.suspensionDamping = 90.0f;
     config.colliderSize = Vector3{2.0f, 0.5f, 4.0f};
     config.centerOfMass = Vector3Zero();
     config.wheelOffsets = {
@@ -350,6 +354,14 @@ VehicleConfig LoadVehicleConfig(
     config.groundLinearDamp = ExtractFloat(
         json, "ground_linear_damp", fallbackConfig.groundLinearDamp);
     config.angularDamp = ExtractFloat(json, "angular_damp", fallbackConfig.angularDamp);
+    config.suspensionRestLength = ExtractFloat(
+        json, "suspension_rest_length", fallbackConfig.suspensionRestLength);
+    config.suspensionRayLength = ExtractFloat(
+        json, "suspension_ray_length", fallbackConfig.suspensionRayLength);
+    config.suspensionStrength = ExtractFloat(
+        json, "suspension_strength", fallbackConfig.suspensionStrength);
+    config.suspensionDamping = ExtractFloat(
+        json, "suspension_damping", fallbackConfig.suspensionDamping);
     config.colliderSize = ExtractVector3(json, "collider_size", fallbackConfig.colliderSize);
     config.centerOfMass = ExtractVector3(json, "center_of_mass", fallbackConfig.centerOfMass);
     config.wheelOffsets = ExtractWheelOffsets(json, "wheel_offsets", fallbackConfig.wheelOffsets);
