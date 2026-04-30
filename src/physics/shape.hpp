@@ -2,6 +2,7 @@
 #define PHYSICS_SHAPE_HPP
 
 #include <memory>
+#include <vector>
 
 #include "raylib.h"
 
@@ -21,6 +22,9 @@ class Shape {
   public:
     virtual ~Shape() {}
     virtual ShapeType GetType() const = 0;
+    virtual std::vector<Vector3> GetLocalContactPoints() const {
+        return std::vector<Vector3>();
+    }
 };
 
 struct CompoundChildShape {

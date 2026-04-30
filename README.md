@@ -2,6 +2,45 @@
 
 Protótipo de jogo de corrida 3D em C++ com raylib.
 
+## Rodar no Pop!_OS / Ubuntu
+
+### Dependências
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake ninja-build git pkg-config libasound2-dev libx11-dev libxrandr-dev libxi-dev libgl1-mesa-dev libglu1-mesa-dev libxcursor-dev libxinerama-dev libwayland-dev libxkbcommon-dev
+```
+
+### Rodar localmente
+
+```bash
+bash scripts/run_linux.sh
+```
+
+Na primeira execução, o CMake baixa e compila a `raylib` 5.5 em `build/linux-debug/`.
+
+### Gerar pacote Linux
+
+```bash
+bash scripts/build_linux.sh
+```
+
+### Saída
+
+Depois do build, o jogo fica disponível em:
+
+```bash
+dist/linux/DragonRage-linux/DragonRage
+```
+
+Também é gerado um pacote compactado em:
+
+```bash
+dist/linux/DragonRage-linux.tar.gz
+```
+
+O diretório empacotado já inclui `resources/`, então o executável mantém os caminhos relativos esperados pelo jogo.
+
 ## Build para Windows com Docker
 
 Este fluxo gera um executável de Windows sem precisar instalar `MinGW` ou `clang++` na sua máquina.

@@ -30,6 +30,10 @@ const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
 const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
 const char* VEHICLE_CONFIG_PATH = "resources/config/vehicle.json";
+const float SPAWN_FRONT_UP_DEGREES = 25.0f;
+const float CONTACT_RESTITUTION = 0.0f;
+const float CONTACT_POSITION_PERCENT = 0.75f;
+const float CONTACT_SLOP = 0.001f;
 
 struct CarVisual {
     Model model;
@@ -162,6 +166,109 @@ physics::Transform3D BuildTransform(const Vector3& position, const Quaternion& r
     return transform;
 }
 
+Vector3 GetBoxInertia(const VehicleConfig& config) {
+    float width = config.colliderSize.x;
+    float height = config.colliderSize.y;
+    float length = config.colliderSize.z;
+    float factor = config.mass / 12.0f;
+    return Vector3{
+        factor * (height * height + length * length),
+        factor * (width * width + length * length),
+        factor * (width * width + height * height)
+    };
+}
+
+Vector3 GetPointVelocity(const VehicleState& vehicle, const Vector3& point) {
+    Vector3 offset = Vector3Subtract(point, vehicle.position);
+    return Vector3Add(
+        vehicle.linearVelocity,
+        Vector3CrossProduct(vehicle.angularVelocity, offset));
+}
+
+void IntegrateVehicleTransform(VehicleState& vehicle, float deltaTime) {
+    vehicle.position = Vector3Add(
+        vehicle.position,
+        Vector3Scale(vehicle.linearVelocity, deltaTime));
+
+    float angularSpeed = Vector3Length(vehicle.angularVelocity);
+    if (angularSpeed <= 0.0001f) {
+        return;
+    }
+
+    Quaternion deltaRotation = QuaternionFromAxisAngle(
+        Vector3Scale(vehicle.angularVelocity, 1.0f / angularSpeed),
+        angularSpeed * deltaTime);
+    vehicle.rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, vehicle.rotation));
+}
+
+void ApplyGroundImpulseAtPoint(
+    VehicleState& vehicle,
+    const VehicleConfig& config,
+    const Vector3& worldPoint,
+    float groundY) {
+    Vector3 normal = Vector3{0.0f, 1.0f, 0.0f};
+    Vector3 offset = Vector3Subtract(worldPoint, vehicle.position);
+    Vector3 pointVelocity = GetPointVelocity(vehicle, worldPoint);
+    float normalVelocity = Vector3DotProduct(pointVelocity, normal);
+
+    if (normalVelocity < 0.0f) {
+        Vector3 inertia = GetBoxInertia(config);
+        Vector3 angularFactor = Vector3CrossProduct(offset, normal);
+        float inverseMass = 1.0f / config.mass;
+        float inverseInertia =
+            (angularFactor.x * angularFactor.x) / inertia.x +
+            (angularFactor.y * angularFactor.y) / inertia.y +
+            (angularFactor.z * angularFactor.z) / inertia.z;
+        float impulseMagnitude =
+            -(1.0f + CONTACT_RESTITUTION) * normalVelocity /
+            (inverseMass + inverseInertia);
+        Vector3 impulse = Vector3Scale(normal, impulseMagnitude);
+        Vector3 torqueImpulse = Vector3CrossProduct(offset, impulse);
+
+        vehicle.linearVelocity = Vector3Add(
+            vehicle.linearVelocity,
+            Vector3Scale(impulse, inverseMass));
+        vehicle.angularVelocity = Vector3Add(
+            vehicle.angularVelocity,
+            Vector3{
+                torqueImpulse.x / inertia.x,
+                torqueImpulse.y / inertia.y,
+                torqueImpulse.z / inertia.z
+            });
+    }
+
+    float penetration = groundY - worldPoint.y;
+    if (penetration > CONTACT_SLOP) {
+        vehicle.position.y += (penetration - CONTACT_SLOP) * CONTACT_POSITION_PERCENT;
+    }
+}
+
+int ResolveGroundContactsFromShapeVertices(GameWorld& gameWorld) {
+    if (!gameWorld.vehicleShape) {
+        return 0;
+    }
+
+    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
+    std::vector<Vector3> localPoints = gameWorld.vehicleShape->GetLocalContactPoints();
+    int contacts = 0;
+
+    for (std::size_t i = 0; i < localPoints.size(); ++i) {
+        Vector3 worldPoint = Vector3Add(
+            gameWorld.vehicle.position,
+            Vector3RotateByQuaternion(localPoints[i], gameWorld.vehicle.rotation));
+        if (worldPoint.y <= groundTopY + CONTACT_SLOP) {
+            ApplyGroundImpulseAtPoint(
+                gameWorld.vehicle,
+                gameWorld.vehicleConfig,
+                worldPoint,
+                groundTopY);
+            ++contacts;
+        }
+    }
+
+    return contacts;
+}
+
 void SyncBodyFromVehicleState(physics::RigidBody& body, const VehicleState& vehicle) {
     body.SetTransform(BuildTransform(vehicle.position, vehicle.rotation));
     body.SetLinearVelocity(vehicle.linearVelocity);
@@ -179,7 +286,7 @@ void SyncVehicleStateFromBody(VehicleState& vehicle, const physics::RigidBody& b
 
 void ConfigurePhysicsScene(GameWorld& gameWorld) {
     gameWorld.physicsWorld = physics::PhysicsWorld();
-    gameWorld.physicsWorld.SetGravity(Vector3{0.0f, 0.0f, 0.0f});
+    gameWorld.physicsWorld.SetGravity(Vector3{0.0f, -9.81f, 0.0f});
 
     physics::StaticBodyDesc roadDesc;
     roadDesc.transform = BuildTransform(GetRoadColliderCenter(gameWorld.world), QuaternionIdentity());
@@ -202,7 +309,7 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
     vehicleDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::Vehicle);
     vehicleDesc.defaultMask = physics::ToMask(physics::CollisionLayer::World);
     vehicleDesc.mass = gameWorld.vehicleConfig.mass;
-    vehicleDesc.gravityScale = 0.0f;
+    vehicleDesc.gravityScale = 1.0f;
     vehicleDesc.linearDamp = 0.0f;
     vehicleDesc.angularDamp = 0.0f;
     gameWorld.vehicleBody = gameWorld.physicsWorld.CreateRigidBody(vehicleDesc);
@@ -257,21 +364,18 @@ VehicleInput ReadVehicleInput(bool controlsEnabled) {
 }
 
 void LoadCarVisual(CarVisual& visual) {
-    std::string modelPath = Utils::ResolveProjectPath("resources/models/CockpitF1.glb");
-    std::string texturePath = Utils::ResolveProjectPath("resources/textures/F1CockpitDiff.png");
-    visual.model = LoadModel(modelPath.c_str());
-    visual.texture = LoadTexture(texturePath.c_str());
     visual.scale = Vector3{1.0f, 1.0f, 1.0f};
-    SetMaterialTexture(&visual.model.materials[0], MATERIAL_MAP_DIFFUSE, visual.texture);
 }
 
 void UnloadCarVisual(CarVisual& visual) {
-    UnloadTexture(visual.texture);
-    UnloadModel(visual.model);
+    (void)visual;
 }
 
 void ResetGameWorld(GameWorld& gameWorld) {
     ResetVehicleState(gameWorld.vehicle, gameWorld.vehicleConfig);
+    gameWorld.vehicle.rotation = QuaternionFromAxisAngle(
+        Vector3{1.0f, 0.0f, 0.0f},
+        SPAWN_FRONT_UP_DEGREES * DEG2RAD);
     if (gameWorld.vehicleBody != nullptr) {
         SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
         gameWorld.physicsWorld.Step(0.0f);
@@ -338,19 +442,17 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     gameWorld.physicsAccumulator += frameDelta;
     gameWorld.logElapsedSeconds += frameDelta;
 
-    VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
-        gameWorld.vehicle.grounded = gameWorld.vehicleBody != nullptr && gameWorld.vehicleBody->IsGrounded();
-        StepVehiclePhysics(
-            gameWorld.vehicle,
-            gameWorld.vehicleConfig,
-            input,
-            physicsStep);
+        gameWorld.vehicle.previousLinearVelocity = gameWorld.vehicle.linearVelocity;
+        gameWorld.vehicle.linearVelocity.y -= 9.81f * physicsStep;
+        IntegrateVehicleTransform(gameWorld.vehicle, physicsStep);
+        int groundContacts = ResolveGroundContactsFromShapeVertices(gameWorld);
+        gameWorld.vehicle.grounded = groundContacts > 0;
+        gameWorld.vehicle.speedKph =
+            Vector3DotProduct(GetVehicleForward(gameWorld.vehicle), gameWorld.vehicle.linearVelocity) * 3.6f;
         if (gameWorld.vehicleBody != nullptr) {
             SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
-            gameWorld.physicsWorld.Step(0.0f);
-            SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
         }
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
@@ -385,57 +487,12 @@ void DrawVehicle(const GameWorld& gameWorld) {
         rotationAxis.x,
         rotationAxis.y,
         rotationAxis.z);
-    rlScalef(
-        gameWorld.visual.scale.x,
-        gameWorld.visual.scale.y,
-        gameWorld.visual.scale.z);
-
-    DrawModel(gameWorld.visual.model, Vector3Zero(), 1.0f, WHITE);
-
-    for (int i = 0; i < 4; ++i) {
-        rlPushMatrix();
-        rlTranslatef(
-            gameWorld.vehicleConfig.wheelOffsets[i].x,
-            gameWorld.vehicleConfig.wheelOffsets[i].y,
-            gameWorld.vehicleConfig.wheelOffsets[i].z);
-        if (i < 2) {
-            rlRotatef(
-                gameWorld.vehicle.wheelSteerAngles[i] * RAD2DEG,
-                0.0f,
-                1.0f,
-                0.0f);
-        }
-        DrawCubeV(
-            Vector3Zero(),
-            Vector3{0.2f, 0.2f, 0.2f},
-            i < 2 ? RED : ORANGE);
-        rlPopMatrix();
-    }
-
-    rlPopMatrix();
-
-    rlPushMatrix();
-    rlTranslatef(
-        gameWorld.vehicle.position.x,
-        gameWorld.vehicle.position.y,
-        gameWorld.vehicle.position.z);
-    rlRotatef(
-        rotationAngle * RAD2DEG,
-        rotationAxis.x,
-        rotationAxis.y,
-        rotationAxis.z);
+    DrawCubeV(Vector3Zero(), gameWorld.vehicleConfig.colliderSize, RED);
     DrawCubeWiresV(
         Vector3Zero(),
         gameWorld.vehicleConfig.colliderSize,
-        SKYBLUE);
+        BLACK);
     rlPopMatrix();
-
-    for (int i = 0; i < 4; ++i) {
-        Vector3 wheelPosition = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-        DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelEngineForces[i], 0.015f, RED);
-        DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelGripForces[i], 0.02f, YELLOW);
-        DrawForceArrow(wheelPosition, gameWorld.vehicle.wheelDragBrakeForces[i], 0.02f, ORANGE);
-    }
 }
 
 void DrawGameplay(const GameWorld& gameWorld) {
@@ -453,13 +510,16 @@ void DrawGameplay(const GameWorld& gameWorld) {
         20,
         gameWorld.debugCamera.enabled ? MAROON : DARKGREEN);
     DrawText(
-        TextFormat("Speed: %d km/h", static_cast<int>(gameWorld.vehicle.speedKph)),
+        TextFormat("Velocity Y: %.2f", gameWorld.vehicle.linearVelocity.y),
         20,
         180,
         20,
         BLACK);
     DrawText(
-        TextFormat("Steer: %.2f deg", GetAverageFrontSteerDegrees(gameWorld.vehicle)),
+        TextFormat("Collider: %.2f x %.2f x %.2f",
+            gameWorld.vehicleConfig.colliderSize.x,
+            gameWorld.vehicleConfig.colliderSize.y,
+            gameWorld.vehicleConfig.colliderSize.z),
         20,
         205,
         20,
@@ -479,7 +539,7 @@ void DrawGameplay(const GameWorld& gameWorld) {
         255,
         20,
         gameWorld.vehicle.grounded ? DARKGREEN : RED);
-    DrawText("Red=engine Yellow=grip Orange=drag/brake", 20, 280, 20, BLACK);
+    DrawText("Test: red rectangle falls and collides with ground", 20, 280, 20, BLACK);
     DrawFPS(20, 310);
 }
 
