@@ -18,6 +18,7 @@ struct VehicleConfig {
     float enginePower;
     float downhillMultiplier;
     float brakePower;
+    float brakeForceMultiplier;
     float tireTurnSpeed;
     float tireMaxTurnDegrees;
     float gripPower;

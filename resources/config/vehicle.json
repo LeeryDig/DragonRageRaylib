@@ -4,6 +4,7 @@
   "engine_power": 18.0,
   "downhill_multiplier": 1.3,
   "brake_power": 25.0,
+  "brake_force_multiplier": 0.25,
   "tire_turn_speed": 1.3,
   "tire_max_turn_degrees": 35.0,
   "grip_power": 10.0,

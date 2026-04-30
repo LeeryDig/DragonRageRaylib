@@ -35,6 +35,8 @@ const float SPAWN_FRONT_UP_DEGREES = 25.0f;
 const float CONTACT_RESTITUTION = 0.0f;
 const float CONTACT_POSITION_PERCENT = 0.75f;
 const float CONTACT_SLOP = 0.001f;
+const float GRASS_HALF_WIDTH = 60.0f;
+const float GRASS_EXTRA_LENGTH = 200.0f;
 
 struct CarVisual {
     Model model;
@@ -186,6 +188,106 @@ Vector3 GetPointVelocity(const VehicleState& vehicle, const Vector3& point) {
         Vector3CrossProduct(vehicle.angularVelocity, offset));
 }
 
+bool IsInsideBoxXZ(const Vector3& point, const Vector3& center, const Vector3& size) {
+    return
+        point.x >= center.x - size.x * 0.5f &&
+        point.x <= center.x + size.x * 0.5f &&
+        point.z >= center.z - size.z * 0.5f &&
+        point.z <= center.z + size.z * 0.5f;
+}
+
+bool SampleGroundYAtPoint(const StaticWorld& world, const Vector3& point, float& groundY) {
+    Vector3 roadCenter = GetRoadColliderCenter(world);
+    Vector3 roadSize = GetRoadColliderSize(world);
+    if (IsInsideBoxXZ(point, roadCenter, roadSize)) {
+        groundY = roadCenter.y + roadSize.y * 0.5f;
+        return true;
+    }
+
+    Vector3 grassCenter = Vector3{0.0f, -0.6f, world.roadCenterZ};
+    Vector3 grassSize = Vector3{GRASS_HALF_WIDTH * 2.0f, 1.2f, world.roadLength + GRASS_EXTRA_LENGTH};
+    if (IsInsideBoxXZ(point, grassCenter, grassSize)) {
+        groundY = grassCenter.y + grassSize.y * 0.5f;
+        return true;
+    }
+
+    return false;
+}
+
+bool TryGroundBoxRayHit(
+    const Vector3& rayOrigin,
+    const Vector3& rayDirection,
+    float rayLength,
+    const Vector3& boxCenter,
+    const Vector3& boxSize,
+    float& hitDistance,
+    Vector3& hitPoint) {
+    if (fabsf(rayDirection.y) <= 0.0001f) {
+        return false;
+    }
+
+    float groundY = boxCenter.y + boxSize.y * 0.5f;
+    float distance = (groundY - rayOrigin.y) / rayDirection.y;
+    if (distance < 0.0f || distance > rayLength) {
+        return false;
+    }
+
+    Vector3 point = Vector3Add(rayOrigin, Vector3Scale(rayDirection, distance));
+    if (!IsInsideBoxXZ(point, boxCenter, boxSize)) {
+        return false;
+    }
+
+    hitDistance = distance;
+    hitPoint = point;
+    return true;
+}
+
+bool TryGroundRayHit(
+    const StaticWorld& world,
+    const Vector3& rayOrigin,
+    const Vector3& rayDirection,
+    float rayLength,
+    float& hitDistance,
+    Vector3& hitPoint) {
+    bool hit = false;
+    hitDistance = rayLength;
+
+    Vector3 roadCenter = GetRoadColliderCenter(world);
+    Vector3 roadSize = GetRoadColliderSize(world);
+    float candidateDistance = 0.0f;
+    Vector3 candidatePoint = Vector3Zero();
+    if (TryGroundBoxRayHit(
+            rayOrigin,
+            rayDirection,
+            rayLength,
+            roadCenter,
+            roadSize,
+            candidateDistance,
+            candidatePoint)) {
+        hit = true;
+        hitDistance = candidateDistance;
+        hitPoint = candidatePoint;
+    }
+
+    Vector3 grassCenter = Vector3{0.0f, -0.6f, world.roadCenterZ};
+    Vector3 grassSize = Vector3{GRASS_HALF_WIDTH * 2.0f, 1.2f, world.roadLength + GRASS_EXTRA_LENGTH};
+    if (TryGroundBoxRayHit(
+            rayOrigin,
+            rayDirection,
+            rayLength,
+            grassCenter,
+            grassSize,
+            candidateDistance,
+            candidatePoint) &&
+        candidateDistance < hitDistance) {
+        hit = true;
+        hitDistance = candidateDistance;
+        hitPoint = candidatePoint;
+    }
+
+    return hit;
+}
+
 float MoveTowardsScalar(float value, float target, float maxDelta) {
     if (fabsf(target - value) <= maxDelta) {
         return target;
@@ -280,15 +382,23 @@ void IntegrateVehicleTransform(VehicleState& vehicle, float deltaTime) {
 }
 
 int ApplySuspensionRays(GameWorld& gameWorld, float deltaTime) {
-    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
     int hits = 0;
 
     gameWorld.vehicle.wheelEngineForces = {Vector3Zero(), Vector3Zero(), Vector3Zero(), Vector3Zero()};
 
     for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
         Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-        float hitDistance = rayOrigin.y - groundTopY;
-        if (hitDistance < 0.0f || hitDistance > gameWorld.vehicleConfig.suspensionRayLength) {
+        Vector3 suspensionUp = GetVehicleUp(gameWorld.vehicle);
+        Vector3 rayDirection = Vector3Negate(suspensionUp);
+        float hitDistance = 0.0f;
+        Vector3 hitPoint = Vector3Zero();
+        if (!TryGroundRayHit(
+                gameWorld.world,
+                rayOrigin,
+                rayDirection,
+                gameWorld.vehicleConfig.suspensionRayLength,
+                hitDistance,
+                hitPoint)) {
             continue;
         }
 
@@ -299,7 +409,7 @@ int ApplySuspensionRays(GameWorld& gameWorld, float deltaTime) {
         }
 
         Vector3 pointVelocity = GetPointVelocity(gameWorld.vehicle, rayOrigin);
-        float relativeVelocity = Vector3DotProduct(Vector3{0.0f, 1.0f, 0.0f}, pointVelocity);
+        float relativeVelocity = Vector3DotProduct(suspensionUp, pointVelocity);
         float forceMagnitude =
             springDistance * gameWorld.vehicleConfig.suspensionStrength -
             relativeVelocity * gameWorld.vehicleConfig.suspensionDamping;
@@ -307,7 +417,7 @@ int ApplySuspensionRays(GameWorld& gameWorld, float deltaTime) {
             continue;
         }
 
-        Vector3 force = Vector3{0.0f, forceMagnitude, 0.0f};
+        Vector3 force = Vector3Scale(suspensionUp, forceMagnitude);
         gameWorld.vehicle.wheelEngineForces[i] = force;
         ApplyForceAtPoint(
             gameWorld.vehicle,
@@ -393,7 +503,7 @@ void ApplyDriveAndSteering(
             -forwardVelocity * carMassShare * drag * 0.02f);
         Vector3 brakeForce = Vector3Scale(
             wheelForward,
-            -forwardVelocity * carMassShare * config.brakePower * input.brake * 0.05f);
+            -forwardVelocity * carMassShare * config.brakePower * input.brake * config.brakeForceMultiplier);
         Vector3 dragBrakeForce = Vector3Add(dragForce, brakeForce);
         vehicle.wheelDragBrakeForces[i] = Vector3Add(
             vehicle.wheelDragBrakeForces[i],
@@ -449,7 +559,6 @@ int ResolveGroundContactsFromShapeVertices(GameWorld& gameWorld) {
         return 0;
     }
 
-    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
     std::vector<Vector3> localPoints = gameWorld.vehicleShape->GetLocalContactPoints();
     int contacts = 0;
 
@@ -457,6 +566,10 @@ int ResolveGroundContactsFromShapeVertices(GameWorld& gameWorld) {
         Vector3 worldPoint = Vector3Add(
             gameWorld.vehicle.position,
             Vector3RotateByQuaternion(localPoints[i], gameWorld.vehicle.rotation));
+        float groundTopY = 0.0f;
+        if (!SampleGroundYAtPoint(gameWorld.world, worldPoint, groundTopY)) {
+            continue;
+        }
         if (worldPoint.y <= groundTopY + CONTACT_SLOP) {
             ApplyGroundImpulseAtPoint(
                 gameWorld.vehicle,
@@ -706,17 +819,26 @@ void DrawVehicle(const GameWorld& gameWorld) {
         BLACK);
     rlPopMatrix();
 
-    float groundTopY = gameWorld.world.groundY + gameWorld.world.roadThickness * 0.5f;
     for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
         Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
+        Vector3 rayDirection = Vector3Negate(GetVehicleUp(gameWorld.vehicle));
         Vector3 rayEnd = Vector3Add(
             rayOrigin,
-            Vector3{0.0f, -gameWorld.vehicleConfig.suspensionRayLength, 0.0f});
-        bool hit =
-            rayOrigin.y >= groundTopY &&
-            rayOrigin.y - groundTopY <= gameWorld.vehicleConfig.suspensionRayLength;
+            Vector3Scale(rayDirection, gameWorld.vehicleConfig.suspensionRayLength));
+        float hitDistance = 0.0f;
+        Vector3 hitPoint = Vector3Zero();
+        bool hit = TryGroundRayHit(
+            gameWorld.world,
+            rayOrigin,
+            rayDirection,
+            gameWorld.vehicleConfig.suspensionRayLength,
+            hitDistance,
+            hitPoint);
         DrawLine3D(rayOrigin, rayEnd, hit ? GREEN : RED);
         DrawSphere(rayOrigin, 0.06f, hit ? GREEN : RED);
+        if (hit) {
+            DrawSphere(hitPoint, 0.05f, BLUE);
+        }
         DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelEngineForces[i], 0.002f, BLUE);
         DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelGripForces[i], 0.01f, YELLOW);
         DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelDragBrakeForces[i], 0.01f, ORANGE);

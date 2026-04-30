@@ -276,6 +276,7 @@ VehicleConfig DefaultVehicleConfig() {
     config.enginePower = 18.0f;
     config.downhillMultiplier = 1.3f;
     config.brakePower = 25.0f;
+    config.brakeForceMultiplier = 0.25f;
     config.tireTurnSpeed = 1.3f;
     config.tireMaxTurnDegrees = 35.0f;
     config.gripPower = 10.0f;
@@ -334,6 +335,8 @@ VehicleConfig LoadVehicleConfig(
     config.downhillMultiplier = ExtractFloat(
         json, "downhill_multiplier", fallbackConfig.downhillMultiplier);
     config.brakePower = ExtractFloat(json, "brake_power", fallbackConfig.brakePower);
+    config.brakeForceMultiplier = ExtractFloat(
+        json, "brake_force_multiplier", fallbackConfig.brakeForceMultiplier);
     config.tireTurnSpeed = ExtractFloat(json, "tire_turn_speed", fallbackConfig.tireTurnSpeed);
     config.tireMaxTurnDegrees = ExtractFloat(
         json, "tire_max_turn_degrees", fallbackConfig.tireMaxTurnDegrees);
