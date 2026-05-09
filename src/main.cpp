@@ -19,6 +19,7 @@
 #include "physics/physicsMaterial.hpp"
 #include "physics/physicsWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
+#include "level/levelLoader.hpp"
 #include "staticWorld.hpp"
 #include "utils.hpp"
 #include "vehiclePhysics.hpp"
@@ -31,6 +32,7 @@ const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
 const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
 const char* VEHICLE_CONFIG_PATH = "resources/config/vehicle.json";
+const char* LEVEL_PATH = "resources/levels/levelteste.glb";
 const float SPAWN_FRONT_UP_DEGREES = 25.0f;
 const float CONTACT_RESTITUTION = 0.0f;
 const float CONTACT_POSITION_PERCENT = 0.75f;
@@ -46,13 +48,14 @@ struct CarVisual {
 
 struct GameWorld {
     StaticWorld world;
+    LevelData level;
     VehicleConfig vehicleConfig;
     VehicleState vehicle;
     physics::PhysicsWorld physicsWorld;
     physics::RigidBody* vehicleBody;
-    physics::StaticBody* roadBody;
+    std::vector<physics::StaticBody*> levelBodies;
+    std::vector<std::shared_ptr<const physics::BoxShape> > levelShapes;
     std::shared_ptr<const physics::BoxShape> vehicleShape;
-    std::shared_ptr<const physics::BoxShape> roadShape;
     CarVisual visual;
     Camera camera;
     ChaseCameraConfig chaseCamera;
@@ -188,103 +191,239 @@ Vector3 GetPointVelocity(const VehicleState& vehicle, const Vector3& point) {
         Vector3CrossProduct(vehicle.angularVelocity, offset));
 }
 
-bool IsInsideBoxXZ(const Vector3& point, const Vector3& center, const Vector3& size) {
-    return
-        point.x >= center.x - size.x * 0.5f &&
-        point.x <= center.x + size.x * 0.5f &&
-        point.z >= center.z - size.z * 0.5f &&
-        point.z <= center.z + size.z * 0.5f;
-}
+struct GroundBoxSample {
+    Vector3 center;
+    Vector3 size;
+    Quaternion rotation;
+};
 
-bool SampleGroundYAtPoint(const StaticWorld& world, const Vector3& point, float& groundY) {
-    Vector3 roadCenter = GetRoadColliderCenter(world);
-    Vector3 roadSize = GetRoadColliderSize(world);
-    if (IsInsideBoxXZ(point, roadCenter, roadSize)) {
-        groundY = roadCenter.y + roadSize.y * 0.5f;
-        return true;
-    }
-
-    Vector3 grassCenter = Vector3{0.0f, -0.6f, world.roadCenterZ};
-    Vector3 grassSize = Vector3{GRASS_HALF_WIDTH * 2.0f, 1.2f, world.roadLength + GRASS_EXTRA_LENGTH};
-    if (IsInsideBoxXZ(point, grassCenter, grassSize)) {
-        groundY = grassCenter.y + grassSize.y * 0.5f;
-        return true;
-    }
-
-    return false;
-}
-
-bool TryGroundBoxRayHit(
+bool TryRoadSurfaceRayHit(
     const Vector3& rayOrigin,
     const Vector3& rayDirection,
     float rayLength,
-    const Vector3& boxCenter,
-    const Vector3& boxSize,
+    const LevelRoadSurface& surface,
     float& hitDistance,
-    Vector3& hitPoint) {
-    if (fabsf(rayDirection.y) <= 0.0001f) {
+    Vector3& hitPoint,
+    Vector3& hitNormal) {
+    Ray ray = Ray{rayOrigin, rayDirection};
+    bool hit = false;
+    hitDistance = rayLength;
+
+    if (!surface.vertices.empty() && surface.indices.size() >= 3) {
+        for (std::size_t i = 0; i + 2 < surface.indices.size(); i += 3) {
+            unsigned int ia = surface.indices[i];
+            unsigned int ib = surface.indices[i + 1];
+            unsigned int ic = surface.indices[i + 2];
+            if (ia >= surface.vertices.size() || ib >= surface.vertices.size() || ic >= surface.vertices.size()) {
+                continue;
+            }
+            RayCollision collision = GetRayCollisionTriangle(
+                ray,
+                surface.vertices[ia],
+                surface.vertices[ib],
+                surface.vertices[ic]);
+            if (collision.hit && collision.distance >= 0.0f && collision.distance <= hitDistance) {
+                hit = true;
+                hitDistance = collision.distance;
+                hitPoint = collision.point;
+                Vector3 normal = collision.normal;
+                if (Vector3LengthSqr(normal) <= 0.0001f) {
+                    normal = Vector3Normalize(Vector3CrossProduct(
+                        Vector3Subtract(surface.vertices[ib], surface.vertices[ia]),
+                        Vector3Subtract(surface.vertices[ic], surface.vertices[ia])));
+                }
+                if (Vector3DotProduct(normal, Vector3{0.0f, 1.0f, 0.0f}) < 0.0f) {
+                    normal = Vector3Negate(normal);
+                }
+                hitNormal = normal;
+            }
+        }
+        return hit;
+    }
+
+    Quaternion inverseRotation = QuaternionInvert(surface.rotation);
+    Vector3 localOrigin = Vector3RotateByQuaternion(Vector3Subtract(rayOrigin, surface.position), inverseRotation);
+    Vector3 localDirection = Vector3RotateByQuaternion(rayDirection, inverseRotation);
+
+    if (fabsf(localDirection.y) < 0.0001f) {
         return false;
     }
 
-    float groundY = boxCenter.y + boxSize.y * 0.5f;
-    float distance = (groundY - rayOrigin.y) / rayDirection.y;
+    float distance = -localOrigin.y / localDirection.y;
     if (distance < 0.0f || distance > rayLength) {
         return false;
     }
 
-    Vector3 point = Vector3Add(rayOrigin, Vector3Scale(rayDirection, distance));
-    if (!IsInsideBoxXZ(point, boxCenter, boxSize)) {
+    Vector3 localHit = Vector3Add(localOrigin, Vector3Scale(localDirection, distance));
+    if (fabsf(localHit.x) > surface.size.x * 0.5f || fabsf(localHit.z) > surface.size.z * 0.5f) {
         return false;
     }
 
     hitDistance = distance;
-    hitPoint = point;
+    hitPoint = Vector3Add(rayOrigin, Vector3Scale(rayDirection, distance));
+    hitNormal = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 1.0f, 0.0f}, surface.rotation));
+    if (Vector3DotProduct(hitNormal, Vector3{0.0f, 1.0f, 0.0f}) < 0.0f) {
+        hitNormal = Vector3Negate(hitNormal);
+    }
     return true;
 }
 
+bool TryRayObbHit(
+    const Vector3& rayOrigin,
+    const Vector3& rayDirection,
+    float rayLength,
+    const GroundBoxSample& box,
+    float& hitDistance,
+    Vector3& hitPoint) {
+    Quaternion inverseRotation = QuaternionInvert(box.rotation);
+    Vector3 localOrigin = Vector3RotateByQuaternion(Vector3Subtract(rayOrigin, box.center), inverseRotation);
+    Vector3 localDirection = Vector3RotateByQuaternion(rayDirection, inverseRotation);
+    Vector3 half = Vector3Scale(box.size, 0.5f);
+
+    float tMin = 0.0f;
+    float tMax = rayLength;
+    float origins[3] = {localOrigin.x, localOrigin.y, localOrigin.z};
+    float directions[3] = {localDirection.x, localDirection.y, localDirection.z};
+    float mins[3] = {-half.x, -half.y, -half.z};
+    float maxs[3] = {half.x, half.y, half.z};
+
+    for (int axis = 0; axis < 3; ++axis) {
+        if (fabsf(directions[axis]) < 0.0001f) {
+            if (origins[axis] < mins[axis] || origins[axis] > maxs[axis]) {
+                return false;
+            }
+            continue;
+        }
+
+        float invD = 1.0f / directions[axis];
+        float t1 = (mins[axis] - origins[axis]) * invD;
+        float t2 = (maxs[axis] - origins[axis]) * invD;
+        if (t1 > t2) {
+            std::swap(t1, t2);
+        }
+        tMin = std::max(tMin, t1);
+        tMax = std::min(tMax, t2);
+        if (tMin > tMax) {
+            return false;
+        }
+    }
+
+    hitDistance = tMin;
+    hitPoint = Vector3Add(rayOrigin, Vector3Scale(rayDirection, hitDistance));
+    return true;
+}
+
+bool IsPointInsideObb(const Vector3& point, const GroundBoxSample& box, float& topY) {
+    Quaternion inverseRotation = QuaternionInvert(box.rotation);
+    Vector3 localPoint = Vector3RotateByQuaternion(Vector3Subtract(point, box.center), inverseRotation);
+    Vector3 half = Vector3Scale(box.size, 0.5f);
+    if (fabsf(localPoint.x) > half.x || fabsf(localPoint.y) > half.y || fabsf(localPoint.z) > half.z) {
+        return false;
+    }
+
+    Vector3 localTop = Vector3{localPoint.x, half.y, localPoint.z};
+    Vector3 worldTop = Vector3Add(box.center, Vector3RotateByQuaternion(localTop, box.rotation));
+    topY = worldTop.y;
+    return true;
+}
+
+bool SampleRoadSurfaceAtPoint(const Vector3& point, const LevelRoadSurface& surface, Vector3& groundPoint, Vector3& groundNormal) {
+    float hitDistance = 0.0f;
+    Vector3 hitPoint = Vector3Zero();
+    Vector3 hitNormal = Vector3{0.0f, 1.0f, 0.0f};
+    Vector3 rayOrigin = Vector3Add(point, Vector3{0.0f, 1000.0f, 0.0f});
+    if (TryRoadSurfaceRayHit(
+            rayOrigin,
+            Vector3{0.0f, -1.0f, 0.0f},
+            2000.0f,
+            surface,
+            hitDistance,
+            hitPoint,
+            hitNormal)) {
+        groundPoint = hitPoint;
+        groundNormal = hitNormal;
+        return true;
+    }
+    return false;
+}
+
+bool SampleGroundAtPoint(const GameWorld& gameWorld, const Vector3& point, Vector3& groundPoint, Vector3& groundNormal) {
+    bool hit = false;
+    float bestY = -INFINITY;
+
+    for (std::size_t i = 0; i < gameWorld.level.roadSurfaces.size(); ++i) {
+        Vector3 candidatePoint = Vector3Zero();
+        Vector3 candidateNormal = Vector3{0.0f, 1.0f, 0.0f};
+        if (SampleRoadSurfaceAtPoint(point, gameWorld.level.roadSurfaces[i], candidatePoint, candidateNormal) && candidatePoint.y > bestY) {
+            hit = true;
+            bestY = candidatePoint.y;
+            groundPoint = candidatePoint;
+            groundNormal = candidateNormal;
+        }
+    }
+
+    for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
+        const LevelBoxVolume& collider = gameWorld.level.colliders[i];
+        GroundBoxSample box = GroundBoxSample{collider.position, collider.size, collider.rotation};
+        float candidateY = 0.0f;
+        if (IsPointInsideObb(point, box, candidateY) && candidateY > bestY) {
+            hit = true;
+            bestY = candidateY;
+            groundPoint = Vector3{point.x, candidateY, point.z};
+            groundNormal = Vector3{0.0f, 1.0f, 0.0f};
+        }
+    }
+
+    return hit;
+}
+
 bool TryGroundRayHit(
-    const StaticWorld& world,
+    const GameWorld& gameWorld,
     const Vector3& rayOrigin,
     const Vector3& rayDirection,
     float rayLength,
     float& hitDistance,
-    Vector3& hitPoint) {
+    Vector3& hitPoint,
+    Vector3* hitNormal = nullptr) {
     bool hit = false;
     hitDistance = rayLength;
-
-    Vector3 roadCenter = GetRoadColliderCenter(world);
-    Vector3 roadSize = GetRoadColliderSize(world);
-    float candidateDistance = 0.0f;
-    Vector3 candidatePoint = Vector3Zero();
-    if (TryGroundBoxRayHit(
-            rayOrigin,
-            rayDirection,
-            rayLength,
-            roadCenter,
-            roadSize,
-            candidateDistance,
-            candidatePoint)) {
-        hit = true;
-        hitDistance = candidateDistance;
-        hitPoint = candidatePoint;
+    for (std::size_t i = 0; i < gameWorld.level.roadSurfaces.size(); ++i) {
+        float candidateDistance = 0.0f;
+        Vector3 candidatePoint = Vector3Zero();
+        Vector3 candidateNormal = Vector3{0.0f, 1.0f, 0.0f};
+        if (TryRoadSurfaceRayHit(
+                rayOrigin,
+                rayDirection,
+                rayLength,
+                gameWorld.level.roadSurfaces[i],
+                candidateDistance,
+                candidatePoint,
+                candidateNormal) &&
+            candidateDistance < hitDistance) {
+            hit = true;
+            hitDistance = candidateDistance;
+            hitPoint = candidatePoint;
+            if (hitNormal != nullptr) {
+                *hitNormal = candidateNormal;
+            }
+        }
     }
 
-    Vector3 grassCenter = Vector3{0.0f, -0.6f, world.roadCenterZ};
-    Vector3 grassSize = Vector3{GRASS_HALF_WIDTH * 2.0f, 1.2f, world.roadLength + GRASS_EXTRA_LENGTH};
-    if (TryGroundBoxRayHit(
-            rayOrigin,
-            rayDirection,
-            rayLength,
-            grassCenter,
-            grassSize,
-            candidateDistance,
-            candidatePoint) &&
-        candidateDistance < hitDistance) {
-        hit = true;
-        hitDistance = candidateDistance;
-        hitPoint = candidatePoint;
+    for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
+        const LevelBoxVolume& collider = gameWorld.level.colliders[i];
+        GroundBoxSample box = GroundBoxSample{collider.position, collider.size, collider.rotation};
+        float candidateDistance = 0.0f;
+        Vector3 candidatePoint = Vector3Zero();
+        if (TryRayObbHit(rayOrigin, rayDirection, rayLength, box, candidateDistance, candidatePoint) &&
+            candidateDistance < hitDistance) {
+            hit = true;
+            hitDistance = candidateDistance;
+            hitPoint = candidatePoint;
+            if (hitNormal != nullptr) {
+                *hitNormal = Vector3{0.0f, 1.0f, 0.0f};
+            }
+        }
     }
-
     return hit;
 }
 
@@ -393,7 +532,7 @@ int ApplySuspensionRays(GameWorld& gameWorld, float deltaTime) {
         float hitDistance = 0.0f;
         Vector3 hitPoint = Vector3Zero();
         if (!TryGroundRayHit(
-                gameWorld.world,
+                gameWorld,
                 rayOrigin,
                 rayDirection,
                 gameWorld.vehicleConfig.suspensionRayLength,
@@ -516,8 +655,9 @@ void ApplyGroundImpulseAtPoint(
     VehicleState& vehicle,
     const VehicleConfig& config,
     const Vector3& worldPoint,
-    float groundY) {
-    Vector3 normal = Vector3{0.0f, 1.0f, 0.0f};
+    const Vector3& groundPoint,
+    const Vector3& groundNormal) {
+    Vector3 normal = Vector3Normalize(groundNormal);
     Vector3 offset = Vector3Subtract(worldPoint, vehicle.position);
     Vector3 pointVelocity = GetPointVelocity(vehicle, worldPoint);
     float normalVelocity = Vector3DotProduct(pointVelocity, normal);
@@ -548,9 +688,11 @@ void ApplyGroundImpulseAtPoint(
             });
     }
 
-    float penetration = groundY - worldPoint.y;
+    float penetration = Vector3DotProduct(Vector3Subtract(groundPoint, worldPoint), normal);
     if (penetration > CONTACT_SLOP) {
-        vehicle.position.y += (penetration - CONTACT_SLOP) * CONTACT_POSITION_PERCENT;
+        vehicle.position = Vector3Add(
+            vehicle.position,
+            Vector3Scale(normal, (penetration - CONTACT_SLOP) * CONTACT_POSITION_PERCENT));
     }
 }
 
@@ -566,16 +708,19 @@ int ResolveGroundContactsFromShapeVertices(GameWorld& gameWorld) {
         Vector3 worldPoint = Vector3Add(
             gameWorld.vehicle.position,
             Vector3RotateByQuaternion(localPoints[i], gameWorld.vehicle.rotation));
-        float groundTopY = 0.0f;
-        if (!SampleGroundYAtPoint(gameWorld.world, worldPoint, groundTopY)) {
+        Vector3 groundPoint = Vector3Zero();
+        Vector3 groundNormal = Vector3{0.0f, 1.0f, 0.0f};
+        if (!SampleGroundAtPoint(gameWorld, worldPoint, groundPoint, groundNormal)) {
             continue;
         }
-        if (worldPoint.y <= groundTopY + CONTACT_SLOP) {
+        float penetration = Vector3DotProduct(Vector3Subtract(groundPoint, worldPoint), Vector3Normalize(groundNormal));
+        if (penetration >= -CONTACT_SLOP) {
             ApplyGroundImpulseAtPoint(
                 gameWorld.vehicle,
                 gameWorld.vehicleConfig,
                 worldPoint,
-                groundTopY);
+                groundPoint,
+                groundNormal);
             ++contacts;
         }
     }
@@ -602,21 +747,31 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
     gameWorld.physicsWorld = physics::PhysicsWorld();
     gameWorld.physicsWorld.SetGravity(Vector3{0.0f, -9.81f, 0.0f});
 
-    physics::StaticBodyDesc roadDesc;
-    roadDesc.transform = BuildTransform(GetRoadColliderCenter(gameWorld.world), QuaternionIdentity());
-    roadDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::World);
-    roadDesc.defaultMask = physics::ToMask(physics::CollisionLayer::Vehicle);
-    gameWorld.roadBody = gameWorld.physicsWorld.CreateStaticBody(roadDesc);
+    gameWorld.levelBodies.clear();
+    gameWorld.levelShapes.clear();
+    gameWorld.levelBodies.reserve(gameWorld.level.colliders.size());
+    gameWorld.levelShapes.reserve(gameWorld.level.colliders.size());
 
-    gameWorld.roadShape.reset(new physics::BoxShape(GetRoadColliderSize(gameWorld.world)));
+    for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
+        const LevelBoxVolume& levelCollider = gameWorld.level.colliders[i];
+        physics::StaticBodyDesc staticDesc;
+        staticDesc.transform = BuildTransform(levelCollider.position, levelCollider.rotation);
+        staticDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::World);
+        staticDesc.defaultMask = physics::ToMask(physics::CollisionLayer::Vehicle);
+        physics::StaticBody* staticBody = gameWorld.physicsWorld.CreateStaticBody(staticDesc);
 
-    physics::ColliderDesc roadCollider;
-    roadCollider.shape = gameWorld.roadShape;
-    roadCollider.layer = physics::ToMask(physics::CollisionLayer::World);
-    roadCollider.mask = physics::ToMask(physics::CollisionLayer::Vehicle);
-    roadCollider.material.name = "road";
-    roadCollider.material.friction = 1.0f;
-    gameWorld.roadBody->AddCollider(roadCollider);
+        std::shared_ptr<const physics::BoxShape> shape(new physics::BoxShape(levelCollider.size));
+        gameWorld.levelShapes.push_back(shape);
+
+        physics::ColliderDesc colliderDesc;
+        colliderDesc.shape = shape;
+        colliderDesc.layer = physics::ToMask(physics::CollisionLayer::World);
+        colliderDesc.mask = physics::ToMask(physics::CollisionLayer::Vehicle);
+        colliderDesc.material.name = levelCollider.name;
+        colliderDesc.material.friction = 1.0f;
+        staticBody->AddCollider(colliderDesc);
+        gameWorld.levelBodies.push_back(staticBody);
+    }
 
     physics::RigidBodyDesc vehicleDesc;
     vehicleDesc.transform = BuildTransform(gameWorld.vehicle.position, gameWorld.vehicle.rotation);
@@ -687,9 +842,14 @@ void UnloadCarVisual(CarVisual& visual) {
 
 void ResetGameWorld(GameWorld& gameWorld) {
     ResetVehicleState(gameWorld.vehicle, gameWorld.vehicleConfig);
-    gameWorld.vehicle.rotation = QuaternionFromAxisAngle(
-        Vector3{1.0f, 0.0f, 0.0f},
-        SPAWN_FRONT_UP_DEGREES * DEG2RAD);
+    if (gameWorld.level.playerSpawn.valid) {
+        gameWorld.vehicle.position = gameWorld.level.playerSpawn.position;
+        gameWorld.vehicle.rotation = gameWorld.level.playerSpawn.rotation;
+    } else {
+        gameWorld.vehicle.rotation = QuaternionFromAxisAngle(
+            Vector3{1.0f, 0.0f, 0.0f},
+            SPAWN_FRONT_UP_DEGREES * DEG2RAD);
+    }
     if (gameWorld.vehicleBody != nullptr) {
         SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
         gameWorld.physicsWorld.Step(0.0f);
@@ -708,7 +868,6 @@ void ResetGameWorld(GameWorld& gameWorld) {
 GameWorld LoadGameWorld() {
     GameWorld gameWorld = {};
     gameWorld.vehicleBody = nullptr;
-    gameWorld.roadBody = nullptr;
     gameWorld.logElapsedSeconds = 0.0f;
     gameWorld.logFrameIndex = 0;
 
@@ -727,6 +886,7 @@ GameWorld LoadGameWorld() {
     };
 
     gameWorld.world = LoadStaticWorld();
+    gameWorld.level = LoadLevel(LEVEL_PATH);
     gameWorld.vehicleConfig = LoadVehicleConfig(
         Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
         DefaultVehicleConfig());
@@ -748,6 +908,7 @@ void UnloadGameWorld(GameWorld& gameWorld) {
     EnableCursor();
     FlushVehicleLog(gameWorld);
     UnloadCarVisual(gameWorld.visual);
+    UnloadLevel(gameWorld.level);
     UnloadStaticWorld(gameWorld.world);
 }
 
@@ -797,6 +958,46 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     AppendVehicleLogSnapshot(gameWorld);
 }
 
+void DrawLevelCollidersDebug(const LevelData& level) {
+    for (std::size_t i = 0; i < level.roadSurfaces.size(); ++i) {
+        const LevelRoadSurface& surface = level.roadSurfaces[i];
+        Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
+        float rotationAngle = 0.0f;
+        QuaternionToAxisAngle(surface.rotation, &rotationAxis, &rotationAngle);
+        if (!surface.vertices.empty() && surface.indices.size() >= 3) {
+            for (std::size_t t = 0; t + 2 < surface.indices.size(); t += 3) {
+                unsigned int ia = surface.indices[t];
+                unsigned int ib = surface.indices[t + 1];
+                unsigned int ic = surface.indices[t + 2];
+                if (ia < surface.vertices.size() && ib < surface.vertices.size() && ic < surface.vertices.size()) {
+                    DrawLine3D(surface.vertices[ia], surface.vertices[ib], GREEN);
+                    DrawLine3D(surface.vertices[ib], surface.vertices[ic], GREEN);
+                    DrawLine3D(surface.vertices[ic], surface.vertices[ia], GREEN);
+                }
+            }
+        } else {
+            Vector3 debugSize = Vector3{surface.size.x, 0.03f, surface.size.z};
+            rlPushMatrix();
+            rlTranslatef(surface.position.x, surface.position.y, surface.position.z);
+            rlRotatef(rotationAngle * RAD2DEG, rotationAxis.x, rotationAxis.y, rotationAxis.z);
+            DrawCubeWiresV(Vector3Zero(), debugSize, GREEN);
+            rlPopMatrix();
+        }
+    }
+
+    for (std::size_t i = 0; i < level.colliders.size(); ++i) {
+        const LevelBoxVolume& collider = level.colliders[i];
+        Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
+        float rotationAngle = 0.0f;
+        QuaternionToAxisAngle(collider.rotation, &rotationAxis, &rotationAngle);
+        rlPushMatrix();
+        rlTranslatef(collider.position.x, collider.position.y, collider.position.z);
+        rlRotatef(rotationAngle * RAD2DEG, rotationAxis.x, rotationAxis.y, rotationAxis.z);
+        DrawCubeWiresV(Vector3Zero(), collider.size, BLUE);
+        rlPopMatrix();
+    }
+}
+
 void DrawVehicle(const GameWorld& gameWorld) {
     Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
     float rotationAngle = 0.0f;
@@ -828,7 +1029,7 @@ void DrawVehicle(const GameWorld& gameWorld) {
         float hitDistance = 0.0f;
         Vector3 hitPoint = Vector3Zero();
         bool hit = TryGroundRayHit(
-            gameWorld.world,
+            gameWorld,
             rayOrigin,
             rayDirection,
             gameWorld.vehicleConfig.suspensionRayLength,
@@ -847,7 +1048,8 @@ void DrawVehicle(const GameWorld& gameWorld) {
 
 void DrawGameplay(const GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
-    DrawStaticWorld(gameWorld.world);
+    DrawLevel(gameWorld.level);
+    DrawLevelCollidersDebug(gameWorld.level);
     DrawVehicle(gameWorld);
     EndMode3D();
     

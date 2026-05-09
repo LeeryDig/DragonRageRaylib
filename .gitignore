@@ -2,7 +2,8 @@ build/
 dist/
 .cmake/
 
-SimpleRacingGame/
+.codex
+.vscode
 
 # Prerequisites
 *.d
