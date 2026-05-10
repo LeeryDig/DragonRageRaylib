@@ -46,6 +46,24 @@ struct CarVisual {
     Vector3 scale;
 };
 
+struct DebugUiState {
+    bool enabled;
+    bool freeCameraActive;
+    bool showForces;
+    bool showVehicleStatus;
+    bool showVehiclePanel;
+    bool showPhysicsPanel;
+    bool pinVehicleStatus;
+    bool pinVehiclePanel;
+    bool pinPhysicsPanel;
+    Vector2 vehicleStatusPos;
+    Vector2 vehiclePanelPos;
+    Vector2 physicsPanelPos;
+    int activeMenu;
+    int draggingPanel;
+    Vector2 dragOffset;
+};
+
 struct GameWorld {
     StaticWorld world;
     LevelData level;
@@ -60,6 +78,7 @@ struct GameWorld {
     Camera camera;
     ChaseCameraConfig chaseCamera;
     DebugCameraState debugCamera;
+    DebugUiState debugUi;
     float physicsAccumulator;
     float logElapsedSeconds;
     unsigned int logFrameIndex;
@@ -856,6 +875,7 @@ void ResetGameWorld(GameWorld& gameWorld) {
         SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
     }
     gameWorld.debugCamera.enabled = false;
+    gameWorld.debugUi.freeCameraActive = false;
     gameWorld.physicsAccumulator = 0.0f;
     gameWorld.camera = CreateChaseCamera(
         gameWorld.vehicle.position,
@@ -897,6 +917,23 @@ GameWorld LoadGameWorld() {
     gameWorld.debugCamera = LoadDebugCameraStateConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
         fallbackDebugCamera);
+    gameWorld.debugUi = DebugUiState{
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        Vector2{20.0f, 50.0f},
+        Vector2{320.0f, 50.0f},
+        Vector2{660.0f, 50.0f},
+        -1,
+        -1,
+        Vector2{0.0f, 0.0f}
+    };
     ConfigurePhysicsScene(gameWorld);
     LoadCarVisual(gameWorld.visual);
     ResetGameWorld(gameWorld);
@@ -917,7 +954,7 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     gameWorld.physicsAccumulator += frameDelta;
     gameWorld.logElapsedSeconds += frameDelta;
 
-    VehicleInput input = ReadVehicleInput(!gameWorld.debugCamera.enabled);
+    VehicleInput input = ReadVehicleInput(!gameWorld.debugUi.enabled);
     int steps = 0;
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
         gameWorld.vehicle.previousLinearVelocity = gameWorld.vehicle.linearVelocity;
@@ -944,8 +981,19 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
         ++steps;
     }
 
-    if (gameWorld.debugCamera.enabled) {
-        UpdateDebugCamera(gameWorld.debugCamera, gameWorld.camera);
+    if (gameWorld.debugUi.enabled) {
+        bool wantsFreeCamera = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+        if (wantsFreeCamera && !gameWorld.debugUi.freeCameraActive) {
+            gameWorld.debugUi.freeCameraActive = true;
+            DisableCursor();
+        } else if (!wantsFreeCamera && gameWorld.debugUi.freeCameraActive) {
+            gameWorld.debugUi.freeCameraActive = false;
+            EnableCursor();
+        }
+
+        if (gameWorld.debugUi.freeCameraActive) {
+            UpdateDebugCamera(gameWorld.debugCamera, gameWorld.camera);
+        }
     } else {
         ApplyChaseCamera(
             gameWorld.camera,
@@ -1020,106 +1068,276 @@ void DrawVehicle(const GameWorld& gameWorld) {
         BLACK);
     rlPopMatrix();
 
-    for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
-        Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-        Vector3 rayDirection = Vector3Negate(GetVehicleUp(gameWorld.vehicle));
-        Vector3 rayEnd = Vector3Add(
-            rayOrigin,
-            Vector3Scale(rayDirection, gameWorld.vehicleConfig.suspensionRayLength));
-        float hitDistance = 0.0f;
-        Vector3 hitPoint = Vector3Zero();
-        bool hit = TryGroundRayHit(
-            gameWorld,
-            rayOrigin,
-            rayDirection,
-            gameWorld.vehicleConfig.suspensionRayLength,
-            hitDistance,
-            hitPoint);
-        DrawLine3D(rayOrigin, rayEnd, hit ? GREEN : RED);
-        DrawSphere(rayOrigin, 0.06f, hit ? GREEN : RED);
-        if (hit) {
-            DrawSphere(hitPoint, 0.05f, BLUE);
+}
+
+bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool checked = false) {
+    Vector2 mouse = GetMousePosition();
+    bool hovered = enabled && CheckCollisionPointRec(mouse, rect);
+    DrawRectangleRec(rect, hovered ? Color{70, 70, 78, 255} : Color{42, 42, 48, 245});
+    DrawRectangleLinesEx(rect, 1.0f, Color{78, 78, 86, 255});
+    if (checked) {
+        DrawText("✓", static_cast<int>(rect.x + 8), static_cast<int>(rect.y + 5), 18, RAYWHITE);
+    }
+    DrawText(text, static_cast<int>(rect.x + 28), static_cast<int>(rect.y + 6), 18, enabled ? RAYWHITE : GRAY);
+    return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+void RestartLevel(GameWorld& gameWorld) {
+    UnloadLevel(gameWorld.level);
+    gameWorld.level = LoadLevel(LEVEL_PATH);
+    gameWorld.vehicleConfig = LoadVehicleConfig(
+        Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
+        DefaultVehicleConfig());
+    gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
+    ConfigurePhysicsScene(gameWorld);
+    ResetGameWorld(gameWorld);
+}
+
+bool DebugButton(Rectangle rect, const char* text) {
+    Vector2 mouse = GetMousePosition();
+    bool hovered = CheckCollisionPointRec(mouse, rect);
+    DrawRectangleRec(rect, hovered ? Color{78, 78, 88, 255} : Color{56, 56, 64, 255});
+    DrawRectangleLinesEx(rect, 1.0f, Color{95, 95, 105, 255});
+    int textWidth = MeasureText(text, 16);
+    DrawText(text, static_cast<int>(rect.x + rect.width * 0.5f - textWidth * 0.5f), static_cast<int>(rect.y + 6), 16, RAYWHITE);
+    return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+}
+
+bool DebugFloatSlider(Rectangle rect, const char* label, float& value, float minValue, float maxValue) {
+    Vector2 mouse = GetMousePosition();
+    Rectangle bar = Rectangle{rect.x + 150.0f, rect.y + 8.0f, rect.width - 230.0f, 8.0f};
+    bool changed = false;
+    if (CheckCollisionPointRec(mouse, Rectangle{bar.x, rect.y, bar.width, rect.height}) && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        float t = Clamp((mouse.x - bar.x) / bar.width, 0.0f, 1.0f);
+        value = minValue + (maxValue - minValue) * t;
+        changed = true;
+    }
+
+    float normalized = Clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
+    DrawText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 2), 16, RAYWHITE);
+    DrawRectangleRec(bar, Color{55, 55, 62, 255});
+    DrawRectangleRec(Rectangle{bar.x, bar.y, bar.width * normalized, bar.height}, Color{90, 130, 210, 255});
+    DrawCircle(static_cast<int>(bar.x + bar.width * normalized), static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
+    DrawText(TextFormat("%.3f", value), static_cast<int>(rect.x + rect.width - 70.0f), static_cast<int>(rect.y + 2), 16, LIGHTGRAY);
+    return changed;
+}
+
+void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
+    DrawText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z), static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
+}
+
+bool BeginDebugPanel(
+    DebugUiState& ui,
+    int panelId,
+    Vector2& position,
+    bool& pinned,
+    const char* title,
+    float width,
+    float height) {
+    Vector2 mouse = GetMousePosition();
+    Rectangle panelRect = Rectangle{position.x, position.y, width, height};
+    Rectangle titleRect = Rectangle{position.x, position.y, width, 28.0f};
+    Rectangle pinRect = Rectangle{position.x + width - 30.0f, position.y + 4.0f, 22.0f, 20.0f};
+
+    if (ui.enabled && CheckCollisionPointRec(mouse, pinRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        pinned = !pinned;
+    }
+
+    if (ui.enabled && CheckCollisionPointRec(mouse, titleRect) && !CheckCollisionPointRec(mouse, pinRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        ui.draggingPanel = panelId;
+        ui.dragOffset = Vector2Subtract(mouse, position);
+    }
+    if (ui.draggingPanel == panelId) {
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            position = Vector2Subtract(mouse, ui.dragOffset);
+            position.x = Clamp(position.x, 0.0f, static_cast<float>(GetScreenWidth()) - width);
+            position.y = Clamp(position.y, 0.0f, static_cast<float>(GetScreenHeight()) - 28.0f);
+        } else {
+            ui.draggingPanel = -1;
         }
-        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelEngineForces[i], 0.002f, BLUE);
-        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelGripForces[i], 0.01f, YELLOW);
-        DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelDragBrakeForces[i], 0.01f, ORANGE);
+    }
+
+    DrawRectangleRec(panelRect, Color{28, 28, 32, 220});
+    DrawRectangleRec(titleRect, Color{42, 42, 48, 245});
+    DrawRectangleLinesEx(panelRect, 1.0f, Color{80, 80, 88, 255});
+    DrawText(title, static_cast<int>(position.x + 12.0f), static_cast<int>(position.y + 6.0f), 18, RAYWHITE);
+    DrawRectangleRec(pinRect, pinned ? Color{80, 120, 80, 255} : Color{65, 65, 72, 255});
+    DrawRectangleLinesEx(pinRect, 1.0f, Color{95, 95, 105, 255});
+    DrawText("P", static_cast<int>(pinRect.x + 6.0f), static_cast<int>(pinRect.y + 2.0f), 16, RAYWHITE);
+    return true;
+}
+
+void DrawDebugPanels(GameWorld& gameWorld) {
+    bool showVehicleStatus = gameWorld.debugUi.showVehicleStatus && (gameWorld.debugUi.enabled || gameWorld.debugUi.pinVehicleStatus);
+    bool showVehiclePanel = gameWorld.debugUi.showVehiclePanel && (gameWorld.debugUi.enabled || gameWorld.debugUi.pinVehiclePanel);
+    bool showPhysicsPanel = gameWorld.debugUi.showPhysicsPanel && (gameWorld.debugUi.enabled || gameWorld.debugUi.pinPhysicsPanel);
+
+    if (showVehicleStatus) {
+        Vector2& pos = gameWorld.debugUi.vehicleStatusPos;
+        BeginDebugPanel(gameWorld.debugUi, 0, pos, gameWorld.debugUi.pinVehicleStatus, "Vehicle Status", 280.0f, 132.0f);
+        DrawText(TextFormat("Speed: %d km/h", static_cast<int>(gameWorld.vehicle.speedKph)), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 44), 18, RAYWHITE);
+        DrawText(gameWorld.vehicle.grounded ? "Grounded" : "Airborne", static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 68), 18, gameWorld.vehicle.grounded ? GREEN : RED);
+        DrawText(TextFormat("Pos: %.1f %.1f %.1f", gameWorld.vehicle.position.x, gameWorld.vehicle.position.y, gameWorld.vehicle.position.z), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 92), 18, RAYWHITE);
+    }
+
+    if (showVehiclePanel) {
+        Vector2& pos = gameWorld.debugUi.vehiclePanelPos;
+        BeginDebugPanel(gameWorld.debugUi, 1, pos, gameWorld.debugUi.pinVehiclePanel, "Vehicle Tuning", 560.0f, 520.0f);
+        float x = pos.x + 14.0f;
+        float y = pos.y + 42.0f;
+        float w = 532.0f;
+        float row = 24.0f;
+
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "fixedTimeStep", gameWorld.vehicleConfig.fixedTimeStep, 0.001f, 0.033f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "mass", gameWorld.vehicleConfig.mass, 100.0f, 2500.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "enginePower", gameWorld.vehicleConfig.enginePower, 0.0f, 200.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "downhillMultiplier", gameWorld.vehicleConfig.downhillMultiplier, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "brakePower", gameWorld.vehicleConfig.brakePower, 0.0f, 100.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "brakeForceMultiplier", gameWorld.vehicleConfig.brakeForceMultiplier, 0.0f, 10.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "tireTurnSpeed", gameWorld.vehicleConfig.tireTurnSpeed, 0.0f, 10.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "tireMaxTurnDegrees", gameWorld.vehicleConfig.tireMaxTurnDegrees, 0.0f, 80.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "gripPower", gameWorld.vehicleConfig.gripPower, 0.0f, 100.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "gripFront", gameWorld.vehicleConfig.gripFront, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "gripRear", gameWorld.vehicleConfig.gripRear, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "gripDriftFront", gameWorld.vehicleConfig.gripDriftFront, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "gripDriftRear", gameWorld.vehicleConfig.gripDriftRear, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "airPitchTorque", gameWorld.vehicleConfig.airPitchTorque, 0.0f, 200.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "extraGravity", gameWorld.vehicleConfig.extraGravity, 0.0f, 50.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "wallPenaltyMultiplier", gameWorld.vehicleConfig.wallPenaltyMultiplier, 0.0f, 5.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "wallSpinDamping", gameWorld.vehicleConfig.wallSpinDamping, 0.0f, 20.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "groundLinearDamp", gameWorld.vehicleConfig.groundLinearDamp, 0.0f, 20.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "angularDamp", gameWorld.vehicleConfig.angularDamp, 0.0f, 20.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "suspRestLength", gameWorld.vehicleConfig.suspensionRestLength, 0.0f, 2.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "suspRayLength", gameWorld.vehicleConfig.suspensionRayLength, 0.0f, 4.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "suspStrength", gameWorld.vehicleConfig.suspensionStrength, 0.0f, 100000.0f); y += row;
+        DebugFloatSlider(Rectangle{x, y, w, 22.0f}, "suspDamping", gameWorld.vehicleConfig.suspensionDamping, 0.0f, 20000.0f); y += row + 4.0f;
+
+        DrawVector3Value(Vector2{x, y}, "colliderSize", gameWorld.vehicleConfig.colliderSize); y += 20.0f;
+        DrawVector3Value(Vector2{x, y}, "centerOfMass", gameWorld.vehicleConfig.centerOfMass); y += 20.0f;
+        DrawText("Vector3/wheels/curves editing coming next", static_cast<int>(x), static_cast<int>(y), 16, GRAY);
+
+        if (DebugButton(Rectangle{pos.x + 380.0f, pos.y + 486.0f, 160.0f, 26.0f}, "Apply collider")) {
+            ConfigurePhysicsScene(gameWorld);
+            SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
+        }
+    }
+
+    if (showPhysicsPanel) {
+        Vector2& pos = gameWorld.debugUi.physicsPanelPos;
+        BeginDebugPanel(gameWorld.debugUi, 2, pos, gameWorld.debugUi.pinPhysicsPanel, "Physics Panel", 320.0f, 110.0f);
+        DrawText("Physics debug tools coming soon", static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 50), 18, LIGHTGRAY);
     }
 }
 
-void DrawGameplay(const GameWorld& gameWorld) {
+void DrawDebugMenuBar(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.enabled) {
+        return;
+    }
+
+    DrawRectangle(0, 0, GetScreenWidth(), 34, Color{28, 28, 32, 235});
+    DrawRectangleLines(0, 0, GetScreenWidth(), 34, Color{70, 70, 78, 255});
+
+    const char* items[] = {"Game", "Debug", "Vehicle", "Physics"};
+    int menuX[4] = {};
+    int menuW[4] = {};
+    int x = 10;
+    Vector2 mouse = GetMousePosition();
+    for (int i = 0; i < 4; ++i) {
+        int width = MeasureText(items[i], 20) + 28;
+        menuX[i] = x;
+        menuW[i] = width;
+        Rectangle rect = Rectangle{static_cast<float>(x), 5.0f, static_cast<float>(width), 24.0f};
+        bool hovered = CheckCollisionPointRec(mouse, rect);
+        if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            gameWorld.debugUi.activeMenu = gameWorld.debugUi.activeMenu == i ? -1 : i;
+        }
+        DrawRectangleRec(rect, hovered || gameWorld.debugUi.activeMenu == i ? Color{62, 62, 70, 255} : Color{42, 42, 48, 255});
+        DrawText(items[i], x + 14, 8, 20, RAYWHITE);
+        x += width + 6;
+    }
+
+    if (gameWorld.debugUi.activeMenu == 0) {
+        float dx = static_cast<float>(menuX[0]);
+        if (DebugMenuItem(Rectangle{dx, 38, 190, 30}, "Restart Level")) {
+            RestartLevel(gameWorld);
+            gameWorld.debugUi.activeMenu = -1;
+        }
+        if (DebugMenuItem(Rectangle{dx, 68, 190, 30}, "Reset Car")) {
+            ResetGameWorld(gameWorld);
+            gameWorld.debugUi.activeMenu = -1;
+        }
+        DebugMenuItem(Rectangle{dx, 98, 190, 30}, "Load Level", false);
+    } else if (gameWorld.debugUi.activeMenu == 1) {
+        float dx = static_cast<float>(menuX[1]);
+        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
+            gameWorld.debugUi.showForces = !gameWorld.debugUi.showForces;
+        }
+        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Vehicle Status", true, gameWorld.debugUi.showVehicleStatus)) {
+            gameWorld.debugUi.showVehicleStatus = !gameWorld.debugUi.showVehicleStatus;
+        }
+    } else if (gameWorld.debugUi.activeMenu == 2) {
+        float dx = static_cast<float>(menuX[2]);
+        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Vehicle Tuning", true, gameWorld.debugUi.showVehiclePanel)) {
+            gameWorld.debugUi.showVehiclePanel = !gameWorld.debugUi.showVehiclePanel;
+        }
+    } else if (gameWorld.debugUi.activeMenu == 3) {
+        float dx = static_cast<float>(menuX[3]);
+        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Physics Panel", true, gameWorld.debugUi.showPhysicsPanel)) {
+            gameWorld.debugUi.showPhysicsPanel = !gameWorld.debugUi.showPhysicsPanel;
+        }
+    }
+
+    DrawText("F1 close menu | Hold RMB + WASD/Q/Z to fly", GetScreenWidth() - 420, 9, 16, LIGHTGRAY);
+}
+
+void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
     DrawLevel(gameWorld.level);
-    DrawLevelCollidersDebug(gameWorld.level);
     DrawVehicle(gameWorld);
+    if (gameWorld.debugUi.showForces) {
+        for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
+            Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
+            Vector3 rayDirection = Vector3Negate(GetVehicleUp(gameWorld.vehicle));
+            Vector3 rayEnd = Vector3Add(rayOrigin, Vector3Scale(rayDirection, gameWorld.vehicleConfig.suspensionRayLength));
+            float hitDistance = 0.0f;
+            Vector3 hitPoint = Vector3Zero();
+            bool hit = TryGroundRayHit(gameWorld, rayOrigin, rayDirection, gameWorld.vehicleConfig.suspensionRayLength, hitDistance, hitPoint);
+            DrawLine3D(rayOrigin, rayEnd, hit ? GREEN : RED);
+            if (hit) DrawSphere(hitPoint, 0.05f, BLUE);
+            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelEngineForces[i], 0.002f, BLUE);
+            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelGripForces[i], 0.01f, YELLOW);
+            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelDragBrakeForces[i], 0.01f, ORANGE);
+        }
+    }
     EndMode3D();
-    
-    DrawText("F2 respawn", 20, 95, 20, BLACK);
-    DrawText("F1 debug camera", 20, 120, 20, BLACK);
-    DrawText(
-        gameWorld.debugCamera.enabled ? "Mode: DEBUG CAMERA" : "Mode: CHASE",
-        20,
-        155,
-        20,
-        gameWorld.debugCamera.enabled ? MAROON : DARKGREEN);
-    DrawText(
-        TextFormat("Speed: %d km/h", static_cast<int>(gameWorld.vehicle.speedKph)),
-        20,
-        180,
-        20,
-        BLACK);
-    DrawText(
-        TextFormat("Velocity Y: %.2f", gameWorld.vehicle.linearVelocity.y),
-        20,
-        205,
-        20,
-        BLACK);
-    DrawText(
-        TextFormat("Collider: %.2f x %.2f x %.2f",
-            gameWorld.vehicleConfig.colliderSize.x,
-            gameWorld.vehicleConfig.colliderSize.y,
-            gameWorld.vehicleConfig.colliderSize.z),
-        20,
-        230,
-        20,
-        BLACK);
-    DrawText(
-        TextFormat("Position: (%.2f, %.2f, %.2f)",
-            gameWorld.vehicle.position.x,
-            gameWorld.vehicle.position.y,
-            gameWorld.vehicle.position.z),
-        20,
-        255,
-        20,
-        BLACK);
-    DrawText(
-        gameWorld.vehicle.grounded ? "Grounded" : "Airborne",
-        20,
-        280,
-        20,
-        gameWorld.vehicle.grounded ? DARKGREEN : RED);
-    DrawText("W/S/A/D drive | Blue=susp Yellow=grip Orange=drive/drag/brake", 20, 305, 20, BLACK);
-    DrawFPS(20, 335);
+    DrawDebugMenuBar(gameWorld);
+    DrawDebugPanels(gameWorld);
 }
 
 }  // namespace
 
 int main() {
     InitWindow(SCRWIDTH, SCRHEIGHT, "Dragon Rage");
+    int monitor = GetCurrentMonitor();
+    int monitorWidth = GetMonitorWidth(monitor);
+    int monitorHeight = GetMonitorHeight(monitor);
+    if (monitorWidth > 0 && monitorHeight > 0) {
+        SetWindowSize(monitorWidth, monitorHeight);
+        SetWindowPosition(0, 0);
+    }
     SetTargetFPS(60);
 
     GameWorld gameWorld = LoadGameWorld();
 
     while (!WindowShouldClose()) {
-        if (IsKeyPressed(KEY_F2)) {
-            ResetGameWorld(gameWorld);
-        }
-
         if (IsKeyPressed(KEY_F1)) {
-            gameWorld.debugCamera.enabled = !gameWorld.debugCamera.enabled;
-            if (gameWorld.debugCamera.enabled) {
-                DisableCursor();
+            gameWorld.debugUi.enabled = !gameWorld.debugUi.enabled;
+            if (gameWorld.debugUi.enabled) {
+                gameWorld.debugUi.freeCameraActive = false;
+                EnableCursor();
                 SyncDebugCameraRotation(gameWorld.debugCamera, gameWorld.camera);
             } else {
+                gameWorld.debugUi.freeCameraActive = false;
                 EnableCursor();
                 ApplyChaseCamera(
                     gameWorld.camera,
