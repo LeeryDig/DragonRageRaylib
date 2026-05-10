@@ -1,0 +1,16 @@
+{
+  "fixed_time_step": 0.008333333,
+  "walk_speed": 3.0,
+  "acceleration": 18.0,
+  "deceleration": 22.0,
+  "turn_speed": 12.0,
+  "gravity": 9.81,
+  "ground_snap_distance": 0.25,
+  "capsule_radius": 0.3,
+  "capsule_height": 1.2,
+  "eye_height": 1.65,
+  "camera_smooth": 0.0,
+  "camera_mouse_sensitivity": 0.003,
+  "camera_pitch_min_degrees": -80.0,
+  "camera_pitch_max_degrees": 80.0
+}

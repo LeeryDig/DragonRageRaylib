@@ -20,6 +20,7 @@
 #include "physics/physicsWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
 #include "level/levelLoader.hpp"
+#include "personController.hpp"
 #include "staticWorld.hpp"
 #include "utils.hpp"
 #include "vehiclePhysics.hpp"
@@ -31,7 +32,7 @@ namespace {
 const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
 const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
-const char* VEHICLE_CONFIG_PATH = "resources/config/vehicle.json";
+const char* PERSON_CONFIG_PATH = "resources/config/person.json";
 const char* LEVEL_PATH = "resources/levels/levelteste.glb";
 const float SPAWN_FRONT_UP_DEGREES = 25.0f;
 const float CONTACT_RESTITUTION = 0.0f;
@@ -67,6 +68,8 @@ struct DebugUiState {
 struct GameWorld {
     StaticWorld world;
     LevelData level;
+    PersonConfig personConfig;
+    PersonState person;
     VehicleConfig vehicleConfig;
     VehicleState vehicle;
     physics::PhysicsWorld physicsWorld;
@@ -860,29 +863,27 @@ void UnloadCarVisual(CarVisual& visual) {
 }
 
 void ResetGameWorld(GameWorld& gameWorld) {
-    ResetVehicleState(gameWorld.vehicle, gameWorld.vehicleConfig);
+    Vector3 spawnPosition = Vector3{0.0f, 2.0f, 0.0f};
+    float spawnYaw = 0.0f;
     if (gameWorld.level.playerSpawn.valid) {
-        gameWorld.vehicle.position = gameWorld.level.playerSpawn.position;
-        gameWorld.vehicle.rotation = gameWorld.level.playerSpawn.rotation;
-    } else {
-        gameWorld.vehicle.rotation = QuaternionFromAxisAngle(
-            Vector3{1.0f, 0.0f, 0.0f},
-            SPAWN_FRONT_UP_DEGREES * DEG2RAD);
+        spawnPosition = gameWorld.level.playerSpawn.position;
+        Vector3 spawnForward = Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, gameWorld.level.playerSpawn.rotation);
+        spawnYaw = atan2f(spawnForward.x, -spawnForward.z);
     }
-    if (gameWorld.vehicleBody != nullptr) {
-        SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
-        gameWorld.physicsWorld.Step(0.0f);
-        SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+
+    ResetPersonState(gameWorld.person, gameWorld.personConfig, spawnPosition, spawnYaw);
+    Vector3 groundPoint = Vector3Zero();
+    Vector3 groundNormal = Vector3{0.0f, 1.0f, 0.0f};
+    if (SampleGroundAtPoint(gameWorld, gameWorld.person.position, groundPoint, groundNormal)) {
+        gameWorld.person.position.y = groundPoint.y;
+        gameWorld.person.grounded = true;
     }
+
     gameWorld.debugCamera.enabled = false;
     gameWorld.debugUi.freeCameraActive = false;
     gameWorld.physicsAccumulator = 0.0f;
-    gameWorld.camera = CreateChaseCamera(
-        gameWorld.vehicle.position,
-        gameWorld.vehicle.rotation,
-        gameWorld.chaseCamera);
-    gameWorld.vehicleLogLines.push_back("---- reset ----");
-    AppendVehicleLogSnapshot(gameWorld);
+    gameWorld.camera = Camera{};
+    ApplyPersonCamera(gameWorld.camera, gameWorld.person, gameWorld.personConfig, 1.0f);
 }
 
 GameWorld LoadGameWorld() {
@@ -907,10 +908,10 @@ GameWorld LoadGameWorld() {
 
     gameWorld.world = LoadStaticWorld();
     gameWorld.level = LoadLevel(LEVEL_PATH);
-    gameWorld.vehicleConfig = LoadVehicleConfig(
-        Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
-        DefaultVehicleConfig());
-    gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
+    gameWorld.personConfig = LoadPersonConfig(
+        Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
+        DefaultPersonConfig());
+    gameWorld.person = CreatePersonState(gameWorld.personConfig);
     gameWorld.chaseCamera = LoadChaseCameraConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
         fallbackChaseCamera);
@@ -934,52 +935,21 @@ GameWorld LoadGameWorld() {
         -1,
         Vector2{0.0f, 0.0f}
     };
-    ConfigurePhysicsScene(gameWorld);
-    LoadCarVisual(gameWorld.visual);
     ResetGameWorld(gameWorld);
+    DisableCursor();
 
     return gameWorld;
 }
 
 void UnloadGameWorld(GameWorld& gameWorld) {
     EnableCursor();
-    FlushVehicleLog(gameWorld);
-    UnloadCarVisual(gameWorld.visual);
     UnloadLevel(gameWorld.level);
     UnloadStaticWorld(gameWorld.world);
 }
 
 void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
-    float physicsStep = gameWorld.vehicleConfig.fixedTimeStep;
+    float physicsStep = gameWorld.personConfig.fixedTimeStep;
     gameWorld.physicsAccumulator += frameDelta;
-    gameWorld.logElapsedSeconds += frameDelta;
-
-    VehicleInput input = ReadVehicleInput(!gameWorld.debugUi.enabled);
-    int steps = 0;
-    while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
-        gameWorld.vehicle.previousLinearVelocity = gameWorld.vehicle.linearVelocity;
-        gameWorld.vehicle.linearVelocity.y -= 9.81f * physicsStep;
-        int suspensionHits = ApplySuspensionRays(gameWorld, physicsStep);
-        ApplyDriveAndSteering(
-            gameWorld,
-            input,
-            physicsStep,
-            suspensionHits > 0);
-        float angularDampFactor = 1.0f / (1.0f + gameWorld.vehicleConfig.angularDamp * physicsStep);
-        gameWorld.vehicle.angularVelocity = Vector3Scale(
-            gameWorld.vehicle.angularVelocity,
-            angularDampFactor);
-        IntegrateVehicleTransform(gameWorld.vehicle, physicsStep);
-        int groundContacts = ResolveGroundContactsFromShapeVertices(gameWorld);
-        gameWorld.vehicle.grounded = suspensionHits > 0 || groundContacts > 0;
-        gameWorld.vehicle.speedKph =
-            Vector3DotProduct(GetVehicleForward(gameWorld.vehicle), gameWorld.vehicle.linearVelocity) * 3.6f;
-        if (gameWorld.vehicleBody != nullptr) {
-            SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
-        }
-        gameWorld.physicsAccumulator -= physicsStep;
-        ++steps;
-    }
 
     if (gameWorld.debugUi.enabled) {
         bool wantsFreeCamera = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
@@ -994,16 +964,55 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
         if (gameWorld.debugUi.freeCameraActive) {
             UpdateDebugCamera(gameWorld.debugCamera, gameWorld.camera);
         }
-    } else {
-        ApplyChaseCamera(
-            gameWorld.camera,
-            gameWorld.vehicle.position,
-            gameWorld.vehicle.rotation,
-            gameWorld.chaseCamera,
-            frameDelta);
+        return;
     }
 
-    AppendVehicleLogSnapshot(gameWorld);
+    UpdatePersonLook(gameWorld.person, gameWorld.personConfig);
+    PersonInput input = ReadPersonInput(true);
+
+    int steps = 0;
+    while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
+        UpdatePersonHorizontalMovement(gameWorld.person, gameWorld.personConfig, input, physicsStep);
+
+        gameWorld.person.velocity.y -= gameWorld.personConfig.gravity * physicsStep;
+        gameWorld.person.position = Vector3Add(
+            gameWorld.person.position,
+            Vector3Scale(gameWorld.person.velocity, physicsStep));
+
+        Vector3 groundSamples[5] = {
+            gameWorld.person.position,
+            Vector3Add(gameWorld.person.position, Vector3{gameWorld.personConfig.capsuleRadius, 0.0f, 0.0f}),
+            Vector3Add(gameWorld.person.position, Vector3{-gameWorld.personConfig.capsuleRadius, 0.0f, 0.0f}),
+            Vector3Add(gameWorld.person.position, Vector3{0.0f, 0.0f, gameWorld.personConfig.capsuleRadius}),
+            Vector3Add(gameWorld.person.position, Vector3{0.0f, 0.0f, -gameWorld.personConfig.capsuleRadius})
+        };
+        bool hasGround = false;
+        float bestGroundY = -INFINITY;
+        for (int i = 0; i < 5; ++i) {
+            Vector3 groundPoint = Vector3Zero();
+            Vector3 groundNormal = Vector3{0.0f, 1.0f, 0.0f};
+            if (SampleGroundAtPoint(gameWorld, groundSamples[i], groundPoint, groundNormal) && groundPoint.y > bestGroundY) {
+                hasGround = true;
+                bestGroundY = groundPoint.y;
+            }
+        }
+
+        gameWorld.person.grounded = false;
+        if (hasGround) {
+            float penetration = bestGroundY - gameWorld.person.position.y;
+            bool fallingOrResting = gameWorld.person.velocity.y <= 0.0f;
+            if (penetration >= -gameWorld.personConfig.groundSnapDistance && fallingOrResting) {
+                gameWorld.person.position.y += penetration;
+                gameWorld.person.velocity.y = 0.0f;
+                gameWorld.person.grounded = true;
+            }
+        }
+
+        gameWorld.physicsAccumulator -= physicsStep;
+        ++steps;
+    }
+
+    ApplyPersonCamera(gameWorld.camera, gameWorld.person, gameWorld.personConfig, frameDelta);
 }
 
 void DrawLevelCollidersDebug(const LevelData& level) {
@@ -1046,28 +1055,24 @@ void DrawLevelCollidersDebug(const LevelData& level) {
     }
 }
 
-void DrawVehicle(const GameWorld& gameWorld) {
-    Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
-    float rotationAngle = 0.0f;
-    QuaternionToAxisAngle(gameWorld.vehicle.rotation, &rotationAxis, &rotationAngle);
+void DrawPersonDebugCapsule(const GameWorld& gameWorld) {
+    Vector3 capsuleBottom = Vector3Add(
+        gameWorld.person.position,
+        Vector3{0.0f, gameWorld.personConfig.capsuleRadius, 0.0f});
+    Vector3 capsuleTop = Vector3Add(
+        gameWorld.person.position,
+        Vector3{0.0f, gameWorld.personConfig.capsuleRadius + gameWorld.personConfig.capsuleHeight, 0.0f});
+    DrawCapsuleWires(
+        capsuleBottom,
+        capsuleTop,
+        gameWorld.personConfig.capsuleRadius,
+        12,
+        6,
+        gameWorld.person.grounded ? GREEN : RED);
 
-    rlPushMatrix();
-    rlTranslatef(
-        gameWorld.vehicle.position.x,
-        gameWorld.vehicle.position.y,
-        gameWorld.vehicle.position.z);
-    rlRotatef(
-        rotationAngle * RAD2DEG,
-        rotationAxis.x,
-        rotationAxis.y,
-        rotationAxis.z);
-    DrawCubeV(Vector3Zero(), gameWorld.vehicleConfig.colliderSize, RED);
-    DrawCubeWiresV(
-        Vector3Zero(),
-        gameWorld.vehicleConfig.colliderSize,
-        BLACK);
-    rlPopMatrix();
-
+    Vector3 eyePosition = Vector3Add(gameWorld.person.position, Vector3{0.0f, gameWorld.personConfig.eyeHeight, 0.0f});
+    DrawSphere(eyePosition, 0.05f, BLUE);
+    DrawLine3D(eyePosition, Vector3Add(eyePosition, Vector3Scale(GetPersonCameraForward(gameWorld.person), 0.8f)), BLUE);
 }
 
 bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool checked = false) {
@@ -1085,11 +1090,10 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool c
 void RestartLevel(GameWorld& gameWorld) {
     UnloadLevel(gameWorld.level);
     gameWorld.level = LoadLevel(LEVEL_PATH);
-    gameWorld.vehicleConfig = LoadVehicleConfig(
-        Utils::ResolveProjectPath(VEHICLE_CONFIG_PATH),
-        DefaultVehicleConfig());
-    gameWorld.vehicle = CreateVehicleState(gameWorld.vehicleConfig);
-    ConfigurePhysicsScene(gameWorld);
+    gameWorld.personConfig = LoadPersonConfig(
+        Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
+        DefaultPersonConfig());
+    gameWorld.person = CreatePersonState(gameWorld.personConfig);
     ResetGameWorld(gameWorld);
 }
 
@@ -1174,10 +1178,11 @@ void DrawDebugPanels(GameWorld& gameWorld) {
 
     if (showVehicleStatus) {
         Vector2& pos = gameWorld.debugUi.vehicleStatusPos;
-        BeginDebugPanel(gameWorld.debugUi, 0, pos, gameWorld.debugUi.pinVehicleStatus, "Vehicle Status", 280.0f, 132.0f);
-        DrawText(TextFormat("Speed: %d km/h", static_cast<int>(gameWorld.vehicle.speedKph)), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 44), 18, RAYWHITE);
-        DrawText(gameWorld.vehicle.grounded ? "Grounded" : "Airborne", static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 68), 18, gameWorld.vehicle.grounded ? GREEN : RED);
-        DrawText(TextFormat("Pos: %.1f %.1f %.1f", gameWorld.vehicle.position.x, gameWorld.vehicle.position.y, gameWorld.vehicle.position.z), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 92), 18, RAYWHITE);
+        BeginDebugPanel(gameWorld.debugUi, 0, pos, gameWorld.debugUi.pinVehicleStatus, "Person Status", 280.0f, 132.0f);
+        float speed = Vector3Length(Vector3{gameWorld.person.velocity.x, 0.0f, gameWorld.person.velocity.z});
+        DrawText(TextFormat("Speed: %.2f m/s", speed), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 44), 18, RAYWHITE);
+        DrawText(gameWorld.person.grounded ? "Grounded" : "Airborne", static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 68), 18, gameWorld.person.grounded ? GREEN : RED);
+        DrawText(TextFormat("Pos: %.1f %.1f %.1f", gameWorld.person.position.x, gameWorld.person.position.y, gameWorld.person.position.z), static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 92), 18, RAYWHITE);
     }
 
     if (showVehiclePanel) {
@@ -1237,7 +1242,7 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
     DrawRectangle(0, 0, GetScreenWidth(), 34, Color{28, 28, 32, 235});
     DrawRectangleLines(0, 0, GetScreenWidth(), 34, Color{70, 70, 78, 255});
 
-    const char* items[] = {"Game", "Debug", "Vehicle", "Physics"};
+    const char* items[] = {"Game", "Debug", "Person", "Physics"};
     int menuX[4] = {};
     int menuW[4] = {};
     int x = 10;
@@ -1262,7 +1267,7 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
             RestartLevel(gameWorld);
             gameWorld.debugUi.activeMenu = -1;
         }
-        if (DebugMenuItem(Rectangle{dx, 68, 190, 30}, "Reset Car")) {
+        if (DebugMenuItem(Rectangle{dx, 68, 190, 30}, "Reset Person")) {
             ResetGameWorld(gameWorld);
             gameWorld.debugUi.activeMenu = -1;
         }
@@ -1272,14 +1277,12 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
             gameWorld.debugUi.showForces = !gameWorld.debugUi.showForces;
         }
-        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Vehicle Status", true, gameWorld.debugUi.showVehicleStatus)) {
+        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Person Status", true, gameWorld.debugUi.showVehicleStatus)) {
             gameWorld.debugUi.showVehicleStatus = !gameWorld.debugUi.showVehicleStatus;
         }
     } else if (gameWorld.debugUi.activeMenu == 2) {
         float dx = static_cast<float>(menuX[2]);
-        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Vehicle Tuning", true, gameWorld.debugUi.showVehiclePanel)) {
-            gameWorld.debugUi.showVehiclePanel = !gameWorld.debugUi.showVehiclePanel;
-        }
+        DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Person Tuning", false);
     } else if (gameWorld.debugUi.activeMenu == 3) {
         float dx = static_cast<float>(menuX[3]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Physics Panel", true, gameWorld.debugUi.showPhysicsPanel)) {
@@ -1293,21 +1296,10 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
 void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
     DrawLevel(gameWorld.level);
-    DrawVehicle(gameWorld);
     if (gameWorld.debugUi.showForces) {
-        for (int i = 0; i < static_cast<int>(gameWorld.vehicleConfig.wheelOffsets.size()); ++i) {
-            Vector3 rayOrigin = GetWheelWorldPosition(gameWorld.vehicle, gameWorld.vehicleConfig, i);
-            Vector3 rayDirection = Vector3Negate(GetVehicleUp(gameWorld.vehicle));
-            Vector3 rayEnd = Vector3Add(rayOrigin, Vector3Scale(rayDirection, gameWorld.vehicleConfig.suspensionRayLength));
-            float hitDistance = 0.0f;
-            Vector3 hitPoint = Vector3Zero();
-            bool hit = TryGroundRayHit(gameWorld, rayOrigin, rayDirection, gameWorld.vehicleConfig.suspensionRayLength, hitDistance, hitPoint);
-            DrawLine3D(rayOrigin, rayEnd, hit ? GREEN : RED);
-            if (hit) DrawSphere(hitPoint, 0.05f, BLUE);
-            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelEngineForces[i], 0.002f, BLUE);
-            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelGripForces[i], 0.01f, YELLOW);
-            DrawForceArrow(rayOrigin, gameWorld.vehicle.wheelDragBrakeForces[i], 0.01f, ORANGE);
-        }
+        DrawPersonDebugCapsule(gameWorld);
+        Vector3 feetPosition = gameWorld.person.position;
+        DrawSphere(feetPosition, 0.05f, gameWorld.person.grounded ? GREEN : RED);
     }
     EndMode3D();
     DrawDebugMenuBar(gameWorld);
@@ -1338,12 +1330,11 @@ int main() {
                 SyncDebugCameraRotation(gameWorld.debugCamera, gameWorld.camera);
             } else {
                 gameWorld.debugUi.freeCameraActive = false;
-                EnableCursor();
-                ApplyChaseCamera(
+                DisableCursor();
+                ApplyPersonCamera(
                     gameWorld.camera,
-                    gameWorld.vehicle.position,
-                    gameWorld.vehicle.rotation,
-                    gameWorld.chaseCamera,
+                    gameWorld.person,
+                    gameWorld.personConfig,
                     1.0f / 60.0f);
             }
         }
