@@ -71,6 +71,45 @@ dist/windows/DragonRage-windows.zip
 
 O diretório empacotado já inclui `resources/`, então o executável mantém os caminhos relativos esperados pelo jogo.
 
+## Build para macOS local
+
+### Dependências
+
+Instale Xcode Command Line Tools e CMake:
+
+```bash
+xcode-select --install
+brew install cmake ninja
+```
+
+### Build rápido local
+
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+Binário gerado em:
+
+```bash
+build/bin/DragonRage
+```
+
+### Gerar pacote macOS
+
+```bash
+bash scripts/build_macos.sh
+```
+
+Saída:
+
+```bash
+dist/macos/DragonRage-macos/DragonRage
+dist/macos/DragonRage-macos.tar.gz
+```
+
+O pacote inclui `resources/`, então o executável mantém os caminhos relativos esperados pelo jogo.
+
 ## Build para macOS sem toolchain local
 
 Binário nativo de macOS não é gerado por este Docker de Windows. Para isso, o repositório inclui um workflow do GitHub Actions em `.github/workflows/build-macos.yml`.
@@ -91,4 +130,4 @@ O workflow publica:
 
 ## Build local com CMake
 
-O projeto agora usa `CMake` como base de build para reutilizar a mesma configuração no Docker e no GitHub Actions.
+O projeto usa `CMake` como base de build para reutilizar a mesma configuração no Docker, macOS local e GitHub Actions.
