@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "raymath.h"
+#include "rlgl.h"
 #include "utils.hpp"
 
 namespace {
@@ -182,6 +183,39 @@ Quaternion QuaternionMember(const JsonValue& value, const char* name, Quaternion
 bool StartsWith(const std::string& text, const char* prefix) {
     std::string p(prefix);
     return text.size() >= p.size() && text.compare(0, p.size(), p) == 0;
+}
+
+LevelDebugNodeKind KindFromNodeName(const std::string& name) {
+    if (StartsWith(name, "VISUAL_")) return LevelDebugNodeKind::Visual;
+    if (StartsWith(name, "COL_")) return LevelDebugNodeKind::Collider;
+    if (StartsWith(name, "ICON_")) return LevelDebugNodeKind::Icon;
+    if (StartsWith(name, "SPAWN_")) return LevelDebugNodeKind::Spawn;
+    if (StartsWith(name, "TRIGGER_")) return LevelDebugNodeKind::Trigger;
+    if (StartsWith(name, "CHECKPOINT_") || name == "FINISH_LINE") return LevelDebugNodeKind::Trigger;
+    return LevelDebugNodeKind::Other;
+}
+
+std::string DebugGroupName(const std::string& name) {
+    std::size_t start = name.find('_');
+    if (start == std::string::npos) return name;
+    ++start;
+    std::size_t end = name.find('_', start);
+    return name.substr(start, end == std::string::npos ? std::string::npos : end - start);
+}
+
+int GetOrCreateDebugGroup(LevelData& level, const std::string& name) {
+    std::string groupName = DebugGroupName(name);
+    for (std::size_t i = 0; i < level.debugGroups.size(); ++i) {
+        if (level.debugGroups[i].name == groupName) return static_cast<int>(i);
+    }
+    LevelDebugGroup group;
+    group.name = groupName;
+    level.debugGroups.push_back(group);
+    return static_cast<int>(level.debugGroups.size() - 1);
+}
+
+Matrix ComposeTransform(Vector3 translation, Quaternion rotation, Vector3 scale) {
+    return MatrixMultiply(MatrixMultiply(MatrixScale(scale.x, scale.y, scale.z), QuaternionToMatrix(rotation)), MatrixTranslate(translation.x, translation.y, translation.z));
 }
 
 int CheckpointIndexFromName(const std::string& name) {
@@ -486,6 +520,29 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         Vector3 volumePosition = Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledLocalCenter, worldRotation));
         Vector3 size = Vector3{fabsf(geometry.bounds.size.x * worldScale.x), fabsf(geometry.bounds.size.y * worldScale.y), fabsf(geometry.bounds.size.z * worldScale.z)};
 
+        LevelDebugNode debugNode;
+        debugNode.name = node.name;
+        debugNode.kind = KindFromNodeName(node.name);
+        debugNode.meshIndex = node.mesh;
+        debugNode.groupId = GetOrCreateDebugGroup(level, node.name);
+        debugNode.runtimeIndex = -1;
+        debugNode.position = volumePosition;
+        debugNode.rotation = worldRotation;
+        debugNode.scale = worldScale;
+        debugNode.size = size;
+
+        if (StartsWith(node.name, "VISUAL_")) {
+            level.renderParts.push_back(LevelRenderPart{node.mesh, ComposeTransform(worldPosition, worldRotation, worldScale)});
+            debugNode.runtimeIndex = static_cast<int>(level.renderParts.size() - 1);
+            level.debugNodes.push_back(debugNode);
+            continue;
+        }
+
+        if (StartsWith(node.name, "ICON_")) {
+            level.debugNodes.push_back(debugNode);
+            continue;
+        }
+
         if (StartsWith(node.name, "COL_")) {
             if (IsRoadSurfaceName(node.name)) {
                 LevelRoadSurface surface;
@@ -504,6 +561,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
                     surface.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
                 }
                 level.roadSurfaces.push_back(surface);
+                debugNode.runtimeIndex = static_cast<int>(level.roadSurfaces.size() - 1);
                 TraceLog(LOG_INFO, "Level road surface: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f)",
                     surface.name.c_str(), surface.position.x, surface.position.y, surface.position.z,
                     surface.size.x, surface.size.y, surface.size.z);
@@ -514,14 +572,17 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
                 collider.rotation = worldRotation;
                 collider.size = size;
                 level.colliders.push_back(collider);
+                debugNode.runtimeIndex = static_cast<int>(level.colliders.size() - 1);
                 TraceLog(LOG_INFO, "Level box collider: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f)",
                     collider.name.c_str(), collider.position.x, collider.position.y, collider.position.z,
                     collider.size.x, collider.size.y, collider.size.z);
             }
+            level.debugNodes.push_back(debugNode);
         } else if (node.name == "SPAWN_PLAYER") {
             level.playerSpawn.position = worldPosition;
             level.playerSpawn.rotation = worldRotation;
             level.playerSpawn.valid = true;
+            level.debugNodes.push_back(debugNode);
             TraceLog(LOG_INFO, "Level spawn: %s pos=(%.2f %.2f %.2f)", node.name.c_str(), worldPosition.x, worldPosition.y, worldPosition.z);
         } else if (StartsWith(node.name, "CHECKPOINT_")) {
             LevelCheckpoint checkpoint;
@@ -531,18 +592,30 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
             checkpoint.rotation = worldRotation;
             checkpoint.size = size;
             level.checkpoints.push_back(checkpoint);
+            debugNode.runtimeIndex = static_cast<int>(level.checkpoints.size() - 1);
+            level.debugNodes.push_back(debugNode);
         } else if (node.name == "FINISH_LINE") {
             level.finishLine.name = node.name;
             level.finishLine.position = worldPosition;
             level.finishLine.rotation = worldRotation;
             level.finishLine.size = size;
             level.hasFinishLine = true;
+            level.debugNodes.push_back(debugNode);
+        } else if (node.mesh >= 0 || debugNode.kind != LevelDebugNodeKind::Other) {
+            level.debugNodes.push_back(debugNode);
         }
     }
 
     std::sort(level.checkpoints.begin(), level.checkpoints.end(), [](const LevelCheckpoint& a, const LevelCheckpoint& b) {
         return a.index < b.index;
     });
+
+    level.originalDebugNodes = level.debugNodes;
+    level.originalColliders = level.colliders;
+    level.originalRoadSurfaces = level.roadSurfaces;
+    level.originalCheckpoints = level.checkpoints;
+    level.originalPlayerSpawn = level.playerSpawn;
+    level.originalFinishLine = level.finishLine;
 }
 
 }  // namespace
@@ -569,6 +642,175 @@ void UnloadLevel(LevelData& level) {
 
 void DrawLevel(const LevelData& level) {
     if (level.visualLoaded) {
-        DrawModel(level.visualModel, Vector3{0.0f, 0.0f, 0.0f}, 1.0f, WHITE);
+        Vector3 axis = Vector3{0.0f, 1.0f, 0.0f};
+        float angle = 0.0f;
+        QuaternionToAxisAngle(level.rootRotation, &axis, &angle);
+        DrawModelEx(level.visualModel, level.rootPosition, axis, angle * RAD2DEG, Vector3{1.0f, 1.0f, 1.0f}, WHITE);
+    }
+}
+
+const char* LevelDebugNodeKindName(LevelDebugNodeKind kind) {
+    switch (kind) {
+        case LevelDebugNodeKind::Visual: return "VISUAL";
+        case LevelDebugNodeKind::Collider: return "COL";
+        case LevelDebugNodeKind::Icon: return "ICON";
+        case LevelDebugNodeKind::Spawn: return "SPAWN";
+        case LevelDebugNodeKind::Trigger: return "TRIGGER";
+        case LevelDebugNodeKind::Invisible: return "INVISIBLE";
+        default: return "OTHER";
+    }
+}
+
+Vector3 ApplyRootPoint(const LevelData& level, Vector3 point) {
+    return Vector3Add(level.rootPosition, Vector3RotateByQuaternion(point, level.rootRotation));
+}
+
+Quaternion ApplyRootRotation(const LevelData& level, Quaternion rotation) {
+    return QuaternionNormalize(QuaternionMultiply(level.rootRotation, rotation));
+}
+
+void ApplyLevelRootTransform(LevelData& level, Vector3 position, Quaternion rotation) {
+    level.rootPosition = position;
+    level.rootRotation = rotation;
+
+    level.debugNodes = level.originalDebugNodes;
+    for (std::size_t i = 0; i < level.debugNodes.size(); ++i) {
+        level.debugNodes[i].position = ApplyRootPoint(level, level.originalDebugNodes[i].position);
+        level.debugNodes[i].rotation = ApplyRootRotation(level, level.originalDebugNodes[i].rotation);
+    }
+
+    level.colliders = level.originalColliders;
+    for (std::size_t i = 0; i < level.colliders.size(); ++i) {
+        level.colliders[i].position = ApplyRootPoint(level, level.originalColliders[i].position);
+        level.colliders[i].rotation = ApplyRootRotation(level, level.originalColliders[i].rotation);
+    }
+
+    level.roadSurfaces = level.originalRoadSurfaces;
+    for (std::size_t i = 0; i < level.roadSurfaces.size(); ++i) {
+        level.roadSurfaces[i].position = ApplyRootPoint(level, level.originalRoadSurfaces[i].position);
+        level.roadSurfaces[i].rotation = ApplyRootRotation(level, level.originalRoadSurfaces[i].rotation);
+        for (std::size_t v = 0; v < level.roadSurfaces[i].vertices.size(); ++v) {
+            level.roadSurfaces[i].vertices[v] = ApplyRootPoint(level, level.originalRoadSurfaces[i].vertices[v]);
+        }
+    }
+
+    level.checkpoints = level.originalCheckpoints;
+    for (std::size_t i = 0; i < level.checkpoints.size(); ++i) {
+        level.checkpoints[i].position = ApplyRootPoint(level, level.originalCheckpoints[i].position);
+        level.checkpoints[i].rotation = ApplyRootRotation(level, level.originalCheckpoints[i].rotation);
+    }
+
+    level.playerSpawn = level.originalPlayerSpawn;
+    if (level.playerSpawn.valid) {
+        level.playerSpawn.position = ApplyRootPoint(level, level.originalPlayerSpawn.position);
+        level.playerSpawn.rotation = ApplyRootRotation(level, level.originalPlayerSpawn.rotation);
+    }
+
+    if (level.hasFinishLine) {
+        level.finishLine = level.originalFinishLine;
+        level.finishLine.position = ApplyRootPoint(level, level.originalFinishLine.position);
+        level.finishLine.rotation = ApplyRootRotation(level, level.originalFinishLine.rotation);
+    }
+}
+
+void ApplyLevelDebugNodeTransform(LevelData& level, int debugNodeIndex, Vector3 position, Quaternion rotation, Vector3 scale) {
+    if (debugNodeIndex < 0 || debugNodeIndex >= static_cast<int>(level.debugNodes.size())) return;
+    LevelDebugNode& node = level.debugNodes[debugNodeIndex];
+    if (node.kind == LevelDebugNodeKind::Visual) {
+        return;
+    }
+
+    Vector3 delta = Vector3Subtract(position, node.position);
+    Vector3 oldScale = node.scale;
+    Vector3 scaleRatio = Vector3{
+        fabsf(oldScale.x) > 0.0001f ? scale.x / oldScale.x : 1.0f,
+        fabsf(oldScale.y) > 0.0001f ? scale.y / oldScale.y : 1.0f,
+        fabsf(oldScale.z) > 0.0001f ? scale.z / oldScale.z : 1.0f
+    };
+    node.position = position;
+    node.rotation = rotation;
+    node.scale = scale;
+    node.size = Vector3{node.size.x * scaleRatio.x, node.size.y * scaleRatio.y, node.size.z * scaleRatio.z};
+
+    if (node.kind == LevelDebugNodeKind::Visual && node.groupId >= 0) {
+        for (std::size_t i = 0; i < level.debugNodes.size(); ++i) {
+            if (static_cast<int>(i) == debugNodeIndex) continue;
+            if (level.debugNodes[i].groupId == node.groupId) {
+                level.debugNodes[i].position = Vector3Add(level.debugNodes[i].position, delta);
+                level.debugNodes[i].rotation = rotation;
+                level.debugNodes[i].scale = Vector3{level.debugNodes[i].scale.x * scaleRatio.x, level.debugNodes[i].scale.y * scaleRatio.y, level.debugNodes[i].scale.z * scaleRatio.z};
+                level.debugNodes[i].size = Vector3{level.debugNodes[i].size.x * scaleRatio.x, level.debugNodes[i].size.y * scaleRatio.y, level.debugNodes[i].size.z * scaleRatio.z};
+            }
+        }
+    }
+
+    for (std::size_t i = 0; i < level.debugNodes.size(); ++i) {
+        const LevelDebugNode& n = level.debugNodes[i];
+        if (n.kind == LevelDebugNodeKind::Visual && n.runtimeIndex >= 0 && n.runtimeIndex < static_cast<int>(level.renderParts.size())) {
+            level.renderParts[n.runtimeIndex].transform = ComposeTransform(n.position, n.rotation, n.scale);
+        } else if (n.kind == LevelDebugNodeKind::Collider && n.runtimeIndex >= 0) {
+            if (IsRoadSurfaceName(n.name) && n.runtimeIndex < static_cast<int>(level.roadSurfaces.size())) {
+                Vector3 roadDelta = Vector3Subtract(n.position, level.roadSurfaces[n.runtimeIndex].position);
+                for (std::size_t v = 0; v < level.roadSurfaces[n.runtimeIndex].vertices.size(); ++v) {
+                    level.roadSurfaces[n.runtimeIndex].vertices[v] = Vector3Add(level.roadSurfaces[n.runtimeIndex].vertices[v], roadDelta);
+                }
+                level.roadSurfaces[n.runtimeIndex].position = n.position;
+                level.roadSurfaces[n.runtimeIndex].rotation = n.rotation;
+                level.roadSurfaces[n.runtimeIndex].size = n.size;
+            } else if (n.runtimeIndex < static_cast<int>(level.colliders.size())) {
+                level.colliders[n.runtimeIndex].position = n.position;
+                level.colliders[n.runtimeIndex].rotation = n.rotation;
+                level.colliders[n.runtimeIndex].size = n.size;
+            }
+        } else if (n.kind == LevelDebugNodeKind::Spawn && n.name == "SPAWN_PLAYER") {
+            level.playerSpawn.position = n.position;
+            level.playerSpawn.rotation = n.rotation;
+        } else if (n.kind == LevelDebugNodeKind::Trigger && n.runtimeIndex >= 0 && n.runtimeIndex < static_cast<int>(level.checkpoints.size())) {
+            level.checkpoints[n.runtimeIndex].position = n.position;
+            level.checkpoints[n.runtimeIndex].rotation = n.rotation;
+            level.checkpoints[n.runtimeIndex].size = n.size;
+        } else if (n.name == "FINISH_LINE") {
+            level.finishLine.position = n.position;
+            level.finishLine.rotation = n.rotation;
+            level.finishLine.size = n.size;
+        }
+    }
+}
+
+void TeleportLevelDebugNodeToCamera(LevelData& level, int debugNodeIndex, const Camera& camera) {
+    if (debugNodeIndex < 0 || debugNodeIndex >= static_cast<int>(level.debugNodes.size())) return;
+    LevelDebugNode node = level.debugNodes[debugNodeIndex];
+    ApplyLevelDebugNodeTransform(level, debugNodeIndex, camera.position, node.rotation, node.scale);
+}
+
+void DrawLevelDebugSelection(const LevelData& level, int debugNodeIndex, const Camera& camera) {
+    if (debugNodeIndex < 0 || debugNodeIndex >= static_cast<int>(level.debugNodes.size())) return;
+    const LevelDebugNode& node = level.debugNodes[debugNodeIndex];
+    DrawLine3D(node.position, Vector3Add(node.position, Vector3{1.0f, 0.0f, 0.0f}), RED);
+    DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 1.0f, 0.0f}), GREEN);
+    DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 0.0f, 1.0f}), BLUE);
+
+    if (node.kind == LevelDebugNodeKind::Collider) {
+        rlPushMatrix();
+        rlTranslatef(node.position.x, node.position.y, node.position.z);
+        Vector3 axis = Vector3{0.0f, 1.0f, 0.0f};
+        float angle = 0.0f;
+        QuaternionToAxisAngle(node.rotation, &axis, &angle);
+        rlRotatef(angle * RAD2DEG, axis.x, axis.y, axis.z);
+        DrawCubeWiresV(Vector3Zero(), node.size, ORANGE);
+        rlPopMatrix();
+    }
+
+    if (node.kind == LevelDebugNodeKind::Spawn || node.kind == LevelDebugNodeKind::Trigger || node.kind == LevelDebugNodeKind::Icon) {
+        Vector3 up = camera.up;
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(camera.target, camera.position), up));
+        float size = 0.35f;
+        Vector3 a = Vector3Add(node.position, Vector3Scale(up, size));
+        Vector3 b = Vector3Add(node.position, Vector3Scale(right, size));
+        Vector3 c = Vector3Subtract(node.position, Vector3Scale(up, size));
+        Vector3 d = Vector3Subtract(node.position, Vector3Scale(right, size));
+        Color color = node.kind == LevelDebugNodeKind::Spawn ? GREEN : SKYBLUE;
+        DrawTriangle3D(a, b, c, color);
+        DrawTriangle3D(a, c, d, color);
     }
 }

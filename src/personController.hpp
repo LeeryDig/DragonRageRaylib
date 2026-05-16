@@ -18,6 +18,8 @@ struct PersonConfig {
     float eyeHeight;
     float cameraSmooth;
     float cameraMouseSensitivity;
+    float interactionDistance;
+    float interactionRayLength;
     float cameraPitchMinDegrees;
     float cameraPitchMaxDegrees;
 };

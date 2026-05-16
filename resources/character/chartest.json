@@ -1,0 +1,12 @@
+{
+  "character": {
+    "id": "Box",
+    "display_name": "Box",
+    "dialogue_text": "Texto placeholder do NPC. Depois isso vira uma conversa de verdade.",
+    "choices": [
+      { "text": "Entendi." },
+      { "text": "Quem é você?" }
+    ],
+    "model_path": "resources/models/LowPolyMazda.glb"
+  }
+}

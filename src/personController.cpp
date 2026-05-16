@@ -109,6 +109,8 @@ PersonConfig DefaultPersonConfig() {
     config.eyeHeight = 1.65f;
     config.cameraSmooth = 0.0f;
     config.cameraMouseSensitivity = 0.003f;
+    config.interactionDistance = 2.5f;
+    config.interactionRayLength = 4.0f;
     config.cameraPitchMinDegrees = -35.0f;
     config.cameraPitchMaxDegrees = 55.0f;
     return config;
@@ -137,6 +139,8 @@ PersonConfig LoadPersonConfig(const std::string& filePath, const PersonConfig& f
     config.eyeHeight = ExtractFloat(json, "eye_height", fallbackConfig.eyeHeight);
     config.cameraSmooth = ExtractFloat(json, "camera_smooth", fallbackConfig.cameraSmooth);
     config.cameraMouseSensitivity = ExtractFloat(json, "camera_mouse_sensitivity", fallbackConfig.cameraMouseSensitivity);
+    config.interactionDistance = ExtractFloat(json, "interaction_distance", fallbackConfig.interactionDistance);
+    config.interactionRayLength = ExtractFloat(json, "interaction_ray_length", fallbackConfig.interactionRayLength);
     config.cameraPitchMinDegrees = ExtractFloat(json, "camera_pitch_min_degrees", fallbackConfig.cameraPitchMinDegrees);
     config.cameraPitchMaxDegrees = ExtractFloat(json, "camera_pitch_max_degrees", fallbackConfig.cameraPitchMaxDegrees);
 

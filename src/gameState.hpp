@@ -6,6 +6,7 @@ enum class SysState {
     MENU,
     OPTIONS,
     PLAYING,
+    DIALOGUE,
     PAUSED
 };
 
