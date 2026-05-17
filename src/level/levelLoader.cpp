@@ -389,10 +389,6 @@ std::vector<unsigned int> ReadIndexAccessor(const JsonValue& root, const std::ve
     return indices;
 }
 
-bool IsRoadSurfaceName(const std::string& name) {
-    return StartsWith(name, "COL_Road") || StartsWith(name, "COL_ROAD") || StartsWith(name, "COL_Ramp") || StartsWith(name, "COL_RAMP");
-}
-
 void ParseLevelMetadata(const std::string& path, LevelData& level) {
     std::string jsonText;
     std::vector<unsigned char> binData;
@@ -544,39 +540,34 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         }
 
         if (StartsWith(node.name, "COL_")) {
-            if (IsRoadSurfaceName(node.name)) {
-                LevelRoadSurface surface;
-                surface.name = node.name;
-                surface.position = volumePosition;
-                surface.rotation = worldRotation;
-                surface.size = size;
-                surface.indices = geometry.indices;
-                surface.vertices.reserve(geometry.vertices.size());
-                for (std::size_t vertex = 0; vertex < geometry.vertices.size(); ++vertex) {
-                    Vector3 scaledVertex = Vector3{
-                        geometry.vertices[vertex].x * worldScale.x,
-                        geometry.vertices[vertex].y * worldScale.y,
-                        geometry.vertices[vertex].z * worldScale.z
-                    };
-                    surface.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
-                }
-                level.roadSurfaces.push_back(surface);
-                debugNode.runtimeIndex = static_cast<int>(level.roadSurfaces.size() - 1);
-                TraceLog(LOG_INFO, "Level road surface: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f)",
-                    surface.name.c_str(), surface.position.x, surface.position.y, surface.position.z,
-                    surface.size.x, surface.size.y, surface.size.z);
-            } else {
-                LevelBoxVolume collider;
-                collider.name = node.name;
-                collider.position = volumePosition;
-                collider.rotation = worldRotation;
-                collider.size = size;
-                level.colliders.push_back(collider);
-                debugNode.runtimeIndex = static_cast<int>(level.colliders.size() - 1);
-                TraceLog(LOG_INFO, "Level box collider: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f)",
-                    collider.name.c_str(), collider.position.x, collider.position.y, collider.position.z,
-                    collider.size.x, collider.size.y, collider.size.z);
+            LevelCollisionMesh collisionMesh;
+            collisionMesh.name = node.name;
+            collisionMesh.position = volumePosition;
+            collisionMesh.rotation = worldRotation;
+            collisionMesh.size = size;
+            collisionMesh.indices = geometry.indices;
+            collisionMesh.vertices.reserve(geometry.vertices.size());
+            for (std::size_t vertex = 0; vertex < geometry.vertices.size(); ++vertex) {
+                Vector3 scaledVertex = Vector3{
+                    geometry.vertices[vertex].x * worldScale.x,
+                    geometry.vertices[vertex].y * worldScale.y,
+                    geometry.vertices[vertex].z * worldScale.z
+                };
+                collisionMesh.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
             }
+            level.collisionMeshes.push_back(collisionMesh);
+            debugNode.runtimeIndex = static_cast<int>(level.collisionMeshes.size() - 1);
+            TraceLog(LOG_INFO, "Level collision mesh: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f) vertices=%zu triangles=%zu",
+                collisionMesh.name.c_str(), collisionMesh.position.x, collisionMesh.position.y, collisionMesh.position.z,
+                collisionMesh.size.x, collisionMesh.size.y, collisionMesh.size.z,
+                collisionMesh.vertices.size(), collisionMesh.indices.size() / 3);
+
+            LevelBoxVolume collider;
+            collider.name = node.name;
+            collider.position = volumePosition;
+            collider.rotation = worldRotation;
+            collider.size = size;
+            level.colliders.push_back(collider);
             level.debugNodes.push_back(debugNode);
         } else if (node.name == "SPAWN_PLAYER") {
             level.playerSpawn.position = worldPosition;
@@ -612,7 +603,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
 
     level.originalDebugNodes = level.debugNodes;
     level.originalColliders = level.colliders;
-    level.originalRoadSurfaces = level.roadSurfaces;
+    level.originalCollisionMeshes = level.collisionMeshes;
     level.originalCheckpoints = level.checkpoints;
     level.originalPlayerSpawn = level.playerSpawn;
     level.originalFinishLine = level.finishLine;
@@ -641,11 +632,26 @@ void UnloadLevel(LevelData& level) {
 }
 
 void DrawLevel(const LevelData& level) {
-    if (level.visualLoaded) {
+    if (!level.visualLoaded) return;
+
+    if (level.renderParts.empty()) {
         Vector3 axis = Vector3{0.0f, 1.0f, 0.0f};
         float angle = 0.0f;
         QuaternionToAxisAngle(level.rootRotation, &axis, &angle);
         DrawModelEx(level.visualModel, level.rootPosition, axis, angle * RAD2DEG, Vector3{1.0f, 1.0f, 1.0f}, WHITE);
+        return;
+    }
+
+    Matrix rootTransform = MatrixMultiply(QuaternionToMatrix(level.rootRotation), MatrixTranslate(level.rootPosition.x, level.rootPosition.y, level.rootPosition.z));
+    for (std::size_t i = 0; i < level.renderParts.size(); ++i) {
+        const LevelRenderPart& part = level.renderParts[i];
+        if (part.meshIndex < 0 || part.meshIndex >= level.visualModel.meshCount) continue;
+        int materialIndex = 0;
+        if (level.visualModel.meshMaterial && part.meshIndex < level.visualModel.meshCount) {
+            materialIndex = level.visualModel.meshMaterial[part.meshIndex];
+        }
+        if (materialIndex < 0 || materialIndex >= level.visualModel.materialCount) materialIndex = 0;
+        DrawMesh(level.visualModel.meshes[part.meshIndex], level.visualModel.materials[materialIndex], rootTransform);
     }
 }
 
@@ -685,12 +691,12 @@ void ApplyLevelRootTransform(LevelData& level, Vector3 position, Quaternion rota
         level.colliders[i].rotation = ApplyRootRotation(level, level.originalColliders[i].rotation);
     }
 
-    level.roadSurfaces = level.originalRoadSurfaces;
-    for (std::size_t i = 0; i < level.roadSurfaces.size(); ++i) {
-        level.roadSurfaces[i].position = ApplyRootPoint(level, level.originalRoadSurfaces[i].position);
-        level.roadSurfaces[i].rotation = ApplyRootRotation(level, level.originalRoadSurfaces[i].rotation);
-        for (std::size_t v = 0; v < level.roadSurfaces[i].vertices.size(); ++v) {
-            level.roadSurfaces[i].vertices[v] = ApplyRootPoint(level, level.originalRoadSurfaces[i].vertices[v]);
+    level.collisionMeshes = level.originalCollisionMeshes;
+    for (std::size_t i = 0; i < level.collisionMeshes.size(); ++i) {
+        level.collisionMeshes[i].position = ApplyRootPoint(level, level.originalCollisionMeshes[i].position);
+        level.collisionMeshes[i].rotation = ApplyRootRotation(level, level.originalCollisionMeshes[i].rotation);
+        for (std::size_t v = 0; v < level.collisionMeshes[i].vertices.size(); ++v) {
+            level.collisionMeshes[i].vertices[v] = ApplyRootPoint(level, level.originalCollisionMeshes[i].vertices[v]);
         }
     }
 
@@ -749,15 +755,16 @@ void ApplyLevelDebugNodeTransform(LevelData& level, int debugNodeIndex, Vector3 
         if (n.kind == LevelDebugNodeKind::Visual && n.runtimeIndex >= 0 && n.runtimeIndex < static_cast<int>(level.renderParts.size())) {
             level.renderParts[n.runtimeIndex].transform = ComposeTransform(n.position, n.rotation, n.scale);
         } else if (n.kind == LevelDebugNodeKind::Collider && n.runtimeIndex >= 0) {
-            if (IsRoadSurfaceName(n.name) && n.runtimeIndex < static_cast<int>(level.roadSurfaces.size())) {
-                Vector3 roadDelta = Vector3Subtract(n.position, level.roadSurfaces[n.runtimeIndex].position);
-                for (std::size_t v = 0; v < level.roadSurfaces[n.runtimeIndex].vertices.size(); ++v) {
-                    level.roadSurfaces[n.runtimeIndex].vertices[v] = Vector3Add(level.roadSurfaces[n.runtimeIndex].vertices[v], roadDelta);
+            if (n.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
+                Vector3 meshDelta = Vector3Subtract(n.position, level.collisionMeshes[n.runtimeIndex].position);
+                for (std::size_t v = 0; v < level.collisionMeshes[n.runtimeIndex].vertices.size(); ++v) {
+                    level.collisionMeshes[n.runtimeIndex].vertices[v] = Vector3Add(level.collisionMeshes[n.runtimeIndex].vertices[v], meshDelta);
                 }
-                level.roadSurfaces[n.runtimeIndex].position = n.position;
-                level.roadSurfaces[n.runtimeIndex].rotation = n.rotation;
-                level.roadSurfaces[n.runtimeIndex].size = n.size;
-            } else if (n.runtimeIndex < static_cast<int>(level.colliders.size())) {
+                level.collisionMeshes[n.runtimeIndex].position = n.position;
+                level.collisionMeshes[n.runtimeIndex].rotation = n.rotation;
+                level.collisionMeshes[n.runtimeIndex].size = n.size;
+            }
+            if (n.runtimeIndex < static_cast<int>(level.colliders.size())) {
                 level.colliders[n.runtimeIndex].position = n.position;
                 level.colliders[n.runtimeIndex].rotation = n.rotation;
                 level.colliders[n.runtimeIndex].size = n.size;
@@ -790,15 +797,18 @@ void DrawLevelDebugSelection(const LevelData& level, int debugNodeIndex, const C
     DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 1.0f, 0.0f}), GREEN);
     DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 0.0f, 1.0f}), BLUE);
 
-    if (node.kind == LevelDebugNodeKind::Collider) {
-        rlPushMatrix();
-        rlTranslatef(node.position.x, node.position.y, node.position.z);
-        Vector3 axis = Vector3{0.0f, 1.0f, 0.0f};
-        float angle = 0.0f;
-        QuaternionToAxisAngle(node.rotation, &axis, &angle);
-        rlRotatef(angle * RAD2DEG, axis.x, axis.y, axis.z);
-        DrawCubeWiresV(Vector3Zero(), node.size, ORANGE);
-        rlPopMatrix();
+    if (node.kind == LevelDebugNodeKind::Collider && node.runtimeIndex >= 0 && node.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
+        const LevelCollisionMesh& mesh = level.collisionMeshes[node.runtimeIndex];
+        for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+            unsigned int ia = mesh.indices[t];
+            unsigned int ib = mesh.indices[t + 1];
+            unsigned int ic = mesh.indices[t + 2];
+            if (ia < mesh.vertices.size() && ib < mesh.vertices.size() && ic < mesh.vertices.size()) {
+                DrawLine3D(mesh.vertices[ia], mesh.vertices[ib], GREEN);
+                DrawLine3D(mesh.vertices[ib], mesh.vertices[ic], GREEN);
+                DrawLine3D(mesh.vertices[ic], mesh.vertices[ia], GREEN);
+            }
+        }
     }
 
     if (node.kind == LevelDebugNodeKind::Spawn || node.kind == LevelDebugNodeKind::Trigger || node.kind == LevelDebugNodeKind::Icon) {

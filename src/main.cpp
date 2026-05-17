@@ -22,7 +22,9 @@
 #include "physics/physicsWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
 #include "level/levelLoader.hpp"
+#include "level/levelsConfig.hpp"
 #include "personController.hpp"
+#include "personCollision.hpp"
 #include "staticWorld.hpp"
 #include "utils.hpp"
 #include "vehiclePhysics.hpp"
@@ -36,7 +38,7 @@ const int SCRHEIGHT = 720;
 const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
 const char* PERSON_CONFIG_PATH = "resources/config/person.json";
 const char* CHARACTER_CONFIG_PATH = "resources/character/chartest.json";
-const char* LEVEL_PATH = "resources/levels/levelteste.glb";
+const char* LEVELS_CONFIG_PATH = "resources/config/levels.json";
 const float SPAWN_FRONT_UP_DEGREES = 25.0f;
 const float CONTACT_RESTITUTION = 0.0f;
 const float CONTACT_POSITION_PERCENT = 0.75f;
@@ -66,6 +68,7 @@ struct DebugUiState {
     bool debugTeleportOpen;
     bool gameTeleportOpen;
     bool levelSidebarOpen;
+    bool levelLoadOpen;
     Vector2 debugTeleportPos;
     Vector2 gameTeleportPos;
     std::string debugTeleportInput[3];
@@ -76,6 +79,8 @@ struct DebugUiState {
     int levelSidebarTab;
     int levelSidebarScroll;
     int selectedLevelNode;
+    int selectedLevelConfigIndex;
+    int levelLoadScroll;
     int activeTextField;
     int activeMenu;
     int draggingPanel;
@@ -84,7 +89,10 @@ struct DebugUiState {
 
 struct GameWorld {
     StaticWorld world;
+    LevelsConfig levelsConfig;
     LevelData level;
+    int currentLevelConfigIndex;
+    std::string currentLevelPath;
     PersonConfig personConfig;
     PersonState person;
     InteractionSystem interactions;
@@ -237,11 +245,11 @@ struct GroundBoxSample {
     Quaternion rotation;
 };
 
-bool TryRoadSurfaceRayHit(
+bool TryCollisionMeshRayHit(
     const Vector3& rayOrigin,
     const Vector3& rayDirection,
     float rayLength,
-    const LevelRoadSurface& surface,
+    const LevelCollisionMesh& mesh,
     float& hitDistance,
     Vector3& hitPoint,
     Vector3& hitNormal) {
@@ -249,63 +257,35 @@ bool TryRoadSurfaceRayHit(
     bool hit = false;
     hitDistance = rayLength;
 
-    if (!surface.vertices.empty() && surface.indices.size() >= 3) {
-        for (std::size_t i = 0; i + 2 < surface.indices.size(); i += 3) {
-            unsigned int ia = surface.indices[i];
-            unsigned int ib = surface.indices[i + 1];
-            unsigned int ic = surface.indices[i + 2];
-            if (ia >= surface.vertices.size() || ib >= surface.vertices.size() || ic >= surface.vertices.size()) {
-                continue;
-            }
-            RayCollision collision = GetRayCollisionTriangle(
-                ray,
-                surface.vertices[ia],
-                surface.vertices[ib],
-                surface.vertices[ic]);
-            if (collision.hit && collision.distance >= 0.0f && collision.distance <= hitDistance) {
-                hit = true;
-                hitDistance = collision.distance;
-                hitPoint = collision.point;
-                Vector3 normal = collision.normal;
-                if (Vector3LengthSqr(normal) <= 0.0001f) {
-                    normal = Vector3Normalize(Vector3CrossProduct(
-                        Vector3Subtract(surface.vertices[ib], surface.vertices[ia]),
-                        Vector3Subtract(surface.vertices[ic], surface.vertices[ia])));
-                }
-                if (Vector3DotProduct(normal, Vector3{0.0f, 1.0f, 0.0f}) < 0.0f) {
-                    normal = Vector3Negate(normal);
-                }
-                hitNormal = normal;
-            }
+    for (std::size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+        unsigned int ia = mesh.indices[i];
+        unsigned int ib = mesh.indices[i + 1];
+        unsigned int ic = mesh.indices[i + 2];
+        if (ia >= mesh.vertices.size() || ib >= mesh.vertices.size() || ic >= mesh.vertices.size()) {
+            continue;
         }
-        return hit;
+        RayCollision collision = GetRayCollisionTriangle(
+            ray,
+            mesh.vertices[ia],
+            mesh.vertices[ib],
+            mesh.vertices[ic]);
+        if (collision.hit && collision.distance >= 0.0f && collision.distance <= hitDistance) {
+            hit = true;
+            hitDistance = collision.distance;
+            hitPoint = collision.point;
+            Vector3 normal = collision.normal;
+            if (Vector3LengthSqr(normal) <= 0.0001f) {
+                normal = Vector3Normalize(Vector3CrossProduct(
+                    Vector3Subtract(mesh.vertices[ib], mesh.vertices[ia]),
+                    Vector3Subtract(mesh.vertices[ic], mesh.vertices[ia])));
+            }
+            if (Vector3DotProduct(normal, rayDirection) > 0.0f) {
+                normal = Vector3Negate(normal);
+            }
+            hitNormal = normal;
+        }
     }
-
-    Quaternion inverseRotation = QuaternionInvert(surface.rotation);
-    Vector3 localOrigin = Vector3RotateByQuaternion(Vector3Subtract(rayOrigin, surface.position), inverseRotation);
-    Vector3 localDirection = Vector3RotateByQuaternion(rayDirection, inverseRotation);
-
-    if (fabsf(localDirection.y) < 0.0001f) {
-        return false;
-    }
-
-    float distance = -localOrigin.y / localDirection.y;
-    if (distance < 0.0f || distance > rayLength) {
-        return false;
-    }
-
-    Vector3 localHit = Vector3Add(localOrigin, Vector3Scale(localDirection, distance));
-    if (fabsf(localHit.x) > surface.size.x * 0.5f || fabsf(localHit.z) > surface.size.z * 0.5f) {
-        return false;
-    }
-
-    hitDistance = distance;
-    hitPoint = Vector3Add(rayOrigin, Vector3Scale(rayDirection, distance));
-    hitNormal = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 1.0f, 0.0f}, surface.rotation));
-    if (Vector3DotProduct(hitNormal, Vector3{0.0f, 1.0f, 0.0f}) < 0.0f) {
-        hitNormal = Vector3Negate(hitNormal);
-    }
-    return true;
+    return hit;
 }
 
 bool TryRayObbHit(
@@ -367,16 +347,16 @@ bool IsPointInsideObb(const Vector3& point, const GroundBoxSample& box, float& t
     return true;
 }
 
-bool SampleRoadSurfaceAtPoint(const Vector3& point, const LevelRoadSurface& surface, Vector3& groundPoint, Vector3& groundNormal) {
+bool SampleCollisionMeshAtPoint(const Vector3& point, const LevelCollisionMesh& mesh, Vector3& groundPoint, Vector3& groundNormal) {
     float hitDistance = 0.0f;
     Vector3 hitPoint = Vector3Zero();
     Vector3 hitNormal = Vector3{0.0f, 1.0f, 0.0f};
     Vector3 rayOrigin = Vector3Add(point, Vector3{0.0f, 1000.0f, 0.0f});
-    if (TryRoadSurfaceRayHit(
+    if (TryCollisionMeshRayHit(
             rayOrigin,
             Vector3{0.0f, -1.0f, 0.0f},
             2000.0f,
-            surface,
+            mesh,
             hitDistance,
             hitPoint,
             hitNormal)) {
@@ -391,26 +371,14 @@ bool SampleGroundAtPoint(const GameWorld& gameWorld, const Vector3& point, Vecto
     bool hit = false;
     float bestY = -INFINITY;
 
-    for (std::size_t i = 0; i < gameWorld.level.roadSurfaces.size(); ++i) {
+    for (std::size_t i = 0; i < gameWorld.level.collisionMeshes.size(); ++i) {
         Vector3 candidatePoint = Vector3Zero();
         Vector3 candidateNormal = Vector3{0.0f, 1.0f, 0.0f};
-        if (SampleRoadSurfaceAtPoint(point, gameWorld.level.roadSurfaces[i], candidatePoint, candidateNormal) && candidatePoint.y > bestY) {
+        if (SampleCollisionMeshAtPoint(point, gameWorld.level.collisionMeshes[i], candidatePoint, candidateNormal) && candidatePoint.y > bestY) {
             hit = true;
             bestY = candidatePoint.y;
             groundPoint = candidatePoint;
             groundNormal = candidateNormal;
-        }
-    }
-
-    for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
-        const LevelBoxVolume& collider = gameWorld.level.colliders[i];
-        GroundBoxSample box = GroundBoxSample{collider.position, collider.size, collider.rotation};
-        float candidateY = 0.0f;
-        if (IsPointInsideObb(point, box, candidateY) && candidateY > bestY) {
-            hit = true;
-            bestY = candidateY;
-            groundPoint = Vector3{point.x, candidateY, point.z};
-            groundNormal = Vector3{0.0f, 1.0f, 0.0f};
         }
     }
 
@@ -427,15 +395,15 @@ bool TryGroundRayHit(
     Vector3* hitNormal = nullptr) {
     bool hit = false;
     hitDistance = rayLength;
-    for (std::size_t i = 0; i < gameWorld.level.roadSurfaces.size(); ++i) {
+    for (std::size_t i = 0; i < gameWorld.level.collisionMeshes.size(); ++i) {
         float candidateDistance = 0.0f;
         Vector3 candidatePoint = Vector3Zero();
         Vector3 candidateNormal = Vector3{0.0f, 1.0f, 0.0f};
-        if (TryRoadSurfaceRayHit(
+        if (TryCollisionMeshRayHit(
                 rayOrigin,
                 rayDirection,
                 rayLength,
-                gameWorld.level.roadSurfaces[i],
+                gameWorld.level.collisionMeshes[i],
                 candidateDistance,
                 candidatePoint,
                 candidateNormal) &&
@@ -445,22 +413,6 @@ bool TryGroundRayHit(
             hitPoint = candidatePoint;
             if (hitNormal != nullptr) {
                 *hitNormal = candidateNormal;
-            }
-        }
-    }
-
-    for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
-        const LevelBoxVolume& collider = gameWorld.level.colliders[i];
-        GroundBoxSample box = GroundBoxSample{collider.position, collider.size, collider.rotation};
-        float candidateDistance = 0.0f;
-        Vector3 candidatePoint = Vector3Zero();
-        if (TryRayObbHit(rayOrigin, rayDirection, rayLength, box, candidateDistance, candidatePoint) &&
-            candidateDistance < hitDistance) {
-            hit = true;
-            hitDistance = candidateDistance;
-            hitPoint = candidatePoint;
-            if (hitNormal != nullptr) {
-                *hitNormal = Vector3{0.0f, 1.0f, 0.0f};
             }
         }
     }
@@ -930,7 +882,13 @@ GameWorld LoadGameWorld() {
     };
 
     gameWorld.world = LoadStaticWorld();
-    gameWorld.level = LoadLevel(LEVEL_PATH);
+    gameWorld.levelsConfig = LoadLevelsConfig(
+        Utils::ResolveProjectPath(LEVELS_CONFIG_PATH),
+        DefaultLevelsConfig());
+    gameWorld.currentLevelConfigIndex = 0;
+    const LevelConfigEntry* initialLevel = GetLevelConfigEntry(gameWorld.levelsConfig, gameWorld.currentLevelConfigIndex);
+    gameWorld.currentLevelPath = initialLevel != nullptr ? initialLevel->path : std::string();
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
@@ -958,6 +916,7 @@ GameWorld LoadGameWorld() {
         false,
         false,
         false,
+        false,
         Vector2{20.0f, 190.0f},
         Vector2{20.0f, 330.0f},
         {"0", "0", "0"},
@@ -968,6 +927,8 @@ GameWorld LoadGameWorld() {
         0,
         0,
         -1,
+        0,
+        0,
         0,
         -1,
         -1,
@@ -1027,36 +988,9 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
         gameWorld.person.position = Vector3Add(
             gameWorld.person.position,
             Vector3Scale(gameWorld.person.velocity, physicsStep));
+        ResolvePersonLevelCollisions(gameWorld.level, gameWorld.person, gameWorld.personConfig);
         ResolveCharacterCollisions(gameWorld.interactions, gameWorld.person.position, gameWorld.personConfig.capsuleRadius);
-
-        Vector3 groundSamples[5] = {
-            gameWorld.person.position,
-            Vector3Add(gameWorld.person.position, Vector3{gameWorld.personConfig.capsuleRadius, 0.0f, 0.0f}),
-            Vector3Add(gameWorld.person.position, Vector3{-gameWorld.personConfig.capsuleRadius, 0.0f, 0.0f}),
-            Vector3Add(gameWorld.person.position, Vector3{0.0f, 0.0f, gameWorld.personConfig.capsuleRadius}),
-            Vector3Add(gameWorld.person.position, Vector3{0.0f, 0.0f, -gameWorld.personConfig.capsuleRadius})
-        };
-        bool hasGround = false;
-        float bestGroundY = -INFINITY;
-        for (int i = 0; i < 5; ++i) {
-            Vector3 groundPoint = Vector3Zero();
-            Vector3 groundNormal = Vector3{0.0f, 1.0f, 0.0f};
-            if (SampleGroundAtPoint(gameWorld, groundSamples[i], groundPoint, groundNormal) && groundPoint.y > bestGroundY) {
-                hasGround = true;
-                bestGroundY = groundPoint.y;
-            }
-        }
-
-        gameWorld.person.grounded = false;
-        if (hasGround) {
-            float penetration = bestGroundY - gameWorld.person.position.y;
-            bool fallingOrResting = gameWorld.person.velocity.y <= 0.0f;
-            if (penetration >= -gameWorld.personConfig.groundSnapDistance && fallingOrResting) {
-                gameWorld.person.position.y += penetration;
-                gameWorld.person.velocity.y = 0.0f;
-                gameWorld.person.grounded = true;
-            }
-        }
+        ApplyPersonGroundSnap(gameWorld.level, gameWorld.person, gameWorld.personConfig);
 
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
@@ -1078,42 +1012,18 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
 }
 
 void DrawLevelCollidersDebug(const LevelData& level) {
-    for (std::size_t i = 0; i < level.roadSurfaces.size(); ++i) {
-        const LevelRoadSurface& surface = level.roadSurfaces[i];
-        Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
-        float rotationAngle = 0.0f;
-        QuaternionToAxisAngle(surface.rotation, &rotationAxis, &rotationAngle);
-        if (!surface.vertices.empty() && surface.indices.size() >= 3) {
-            for (std::size_t t = 0; t + 2 < surface.indices.size(); t += 3) {
-                unsigned int ia = surface.indices[t];
-                unsigned int ib = surface.indices[t + 1];
-                unsigned int ic = surface.indices[t + 2];
-                if (ia < surface.vertices.size() && ib < surface.vertices.size() && ic < surface.vertices.size()) {
-                    DrawLine3D(surface.vertices[ia], surface.vertices[ib], GREEN);
-                    DrawLine3D(surface.vertices[ib], surface.vertices[ic], GREEN);
-                    DrawLine3D(surface.vertices[ic], surface.vertices[ia], GREEN);
-                }
+    for (std::size_t i = 0; i < level.collisionMeshes.size(); ++i) {
+        const LevelCollisionMesh& mesh = level.collisionMeshes[i];
+        for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+            unsigned int ia = mesh.indices[t];
+            unsigned int ib = mesh.indices[t + 1];
+            unsigned int ic = mesh.indices[t + 2];
+            if (ia < mesh.vertices.size() && ib < mesh.vertices.size() && ic < mesh.vertices.size()) {
+                DrawLine3D(mesh.vertices[ia], mesh.vertices[ib], GREEN);
+                DrawLine3D(mesh.vertices[ib], mesh.vertices[ic], GREEN);
+                DrawLine3D(mesh.vertices[ic], mesh.vertices[ia], GREEN);
             }
-        } else {
-            Vector3 debugSize = Vector3{surface.size.x, 0.03f, surface.size.z};
-            rlPushMatrix();
-            rlTranslatef(surface.position.x, surface.position.y, surface.position.z);
-            rlRotatef(rotationAngle * RAD2DEG, rotationAxis.x, rotationAxis.y, rotationAxis.z);
-            DrawCubeWiresV(Vector3Zero(), debugSize, GREEN);
-            rlPopMatrix();
         }
-    }
-
-    for (std::size_t i = 0; i < level.colliders.size(); ++i) {
-        const LevelBoxVolume& collider = level.colliders[i];
-        Vector3 rotationAxis = Vector3{0.0f, 1.0f, 0.0f};
-        float rotationAngle = 0.0f;
-        QuaternionToAxisAngle(collider.rotation, &rotationAxis, &rotationAngle);
-        rlPushMatrix();
-        rlTranslatef(collider.position.x, collider.position.y, collider.position.z);
-        rlRotatef(rotationAngle * RAD2DEG, rotationAxis.x, rotationAxis.y, rotationAxis.z);
-        DrawCubeWiresV(Vector3Zero(), collider.size, BLUE);
-        rlPopMatrix();
     }
 }
 
@@ -1209,7 +1119,7 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool c
 
 void RestartLevel(GameWorld& gameWorld) {
     UnloadLevel(gameWorld.level);
-    gameWorld.level = LoadLevel(LEVEL_PATH);
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
@@ -1217,6 +1127,48 @@ void RestartLevel(GameWorld& gameWorld) {
     UnloadInteractionSystem(gameWorld.interactions);
     gameWorld.interactions = LoadInteractionSystem(Utils::ResolveProjectPath(CHARACTER_CONFIG_PATH));
     ResetGameWorld(gameWorld);
+}
+
+void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
+    const LevelConfigEntry* entry = GetLevelConfigEntry(gameWorld.levelsConfig, levelIndex);
+    if (entry == nullptr) return;
+
+    UnloadLevel(gameWorld.level);
+    gameWorld.currentLevelConfigIndex = levelIndex;
+    gameWorld.currentLevelPath = entry->path;
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
+    gameWorld.personConfig = LoadPersonConfig(
+        Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
+        DefaultPersonConfig());
+    gameWorld.person = CreatePersonState(gameWorld.personConfig);
+    UnloadInteractionSystem(gameWorld.interactions);
+    gameWorld.interactions = LoadInteractionSystem(Utils::ResolveProjectPath(CHARACTER_CONFIG_PATH));
+    gameWorld.debugUi.selectedLevelNode = -1;
+    gameWorld.debugUi.levelSidebarScroll = 0;
+    gameWorld.debugUi.activeMenu = -1;
+    ResetGameWorld(gameWorld);
+}
+
+void SaveLevelsConfigToDisk(const LevelsConfig& config) {
+    SaveLevelsConfig(Utils::ResolveWritableProjectPath(LEVELS_CONFIG_PATH), config);
+}
+
+void MoveLevelConfigEntry(GameWorld& gameWorld, int fromIndex, int toIndex) {
+    if (fromIndex < 0 || toIndex < 0) return;
+    if (fromIndex >= static_cast<int>(gameWorld.levelsConfig.levels.size())) return;
+    if (toIndex >= static_cast<int>(gameWorld.levelsConfig.levels.size())) return;
+
+    std::swap(
+        gameWorld.levelsConfig.levels[static_cast<std::size_t>(fromIndex)],
+        gameWorld.levelsConfig.levels[static_cast<std::size_t>(toIndex)]);
+    gameWorld.debugUi.selectedLevelConfigIndex = toIndex;
+    gameWorld.debugUi.levelLoadScroll = Clamp(gameWorld.debugUi.levelLoadScroll, 0, std::max(0, static_cast<int>(gameWorld.levelsConfig.levels.size()) - 1));
+    if (gameWorld.currentLevelConfigIndex == fromIndex) {
+        gameWorld.currentLevelConfigIndex = toIndex;
+    } else if (gameWorld.currentLevelConfigIndex == toIndex) {
+        gameWorld.currentLevelConfigIndex = fromIndex;
+    }
+    SaveLevelsConfigToDisk(gameWorld.levelsConfig);
 }
 
 bool DebugButton(Rectangle rect, const char* text) {
@@ -1401,7 +1353,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
     Rectangle panel = Rectangle{x, 34.0f, width, h};
     DrawRectangleRec(panel, Color{24, 24, 30, 235});
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
-    DrawText("Level Meshes", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
+    DrawText("Inspector", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
     const char* tabs[] = {"ROOT", "VIS", "COL", "ICON", "SP/TR", "OTHER"};
     for (int i = 0; i < 6; ++i) {
@@ -1628,6 +1580,77 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
     }
 }
 
+void DrawLevelLoadSidebar(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.enabled || !gameWorld.debugUi.levelLoadOpen) return;
+
+    float width = 390.0f;
+    float x = static_cast<float>(GetScreenWidth()) - width;
+    float h = static_cast<float>(GetScreenHeight()) - 34.0f;
+    Rectangle panel = Rectangle{x, 34.0f, width, h};
+    DrawRectangleRec(panel, Color{24, 24, 30, 235});
+    DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
+    DrawText("Level Load", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
+
+    DrawText("Ordem da lista define level inicial no boot.", static_cast<int>(x + 14.0f), 72, 14, GRAY);
+
+    float listY = 100.0f;
+    float rowH = 46.0f;
+    int count = static_cast<int>(gameWorld.levelsConfig.levels.size());
+    if (count == 0) {
+        DrawText("No levels in levels.json", static_cast<int>(x + 14.0f), static_cast<int>(listY), 16, ORANGE);
+        return;
+    }
+
+    gameWorld.debugUi.selectedLevelConfigIndex = Clamp(gameWorld.debugUi.selectedLevelConfigIndex, 0, count - 1);
+    int visibleRows = std::min(count, std::max(1, static_cast<int>((h - 250.0f) / rowH)));
+    if (CheckCollisionPointRec(GetMousePosition(), Rectangle{x, listY, width, visibleRows * rowH})) {
+        gameWorld.debugUi.levelLoadScroll -= static_cast<int>(GetMouseWheelMove());
+    }
+    gameWorld.debugUi.levelLoadScroll = Clamp(gameWorld.debugUi.levelLoadScroll, 0, std::max(0, count - visibleRows));
+    for (int i = 0; i < visibleRows; ++i) {
+        int levelIndex = gameWorld.debugUi.levelLoadScroll + i;
+        const LevelConfigEntry& entry = gameWorld.levelsConfig.levels[static_cast<std::size_t>(levelIndex)];
+        Rectangle row = Rectangle{x + 12.0f, listY + i * rowH, width - 24.0f, rowH - 4.0f};
+        bool selected = gameWorld.debugUi.selectedLevelConfigIndex == levelIndex;
+        bool current = gameWorld.currentLevelConfigIndex == levelIndex;
+        bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
+        DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
+        DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
+        DrawText(TextFormat("%d. %s%s", levelIndex + 1, GetLevelDisplayName(entry).c_str(), current ? "  [loaded]" : ""), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 6.0f), 16, RAYWHITE);
+        DrawText(entry.path.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 25.0f), 13, LIGHTGRAY);
+        if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            gameWorld.debugUi.selectedLevelConfigIndex = levelIndex;
+        }
+    }
+
+    if (count > visibleRows) {
+        DrawText(TextFormat("%d-%d / %d", gameWorld.debugUi.levelLoadScroll + 1, gameWorld.debugUi.levelLoadScroll + visibleRows, count), static_cast<int>(x + 14.0f), static_cast<int>(listY + visibleRows * rowH + 6.0f), 14, GRAY);
+    }
+
+    float actionY = listY + visibleRows * rowH + 34.0f;
+    int selectedIndex = gameWorld.debugUi.selectedLevelConfigIndex;
+    const LevelConfigEntry* selectedEntry = GetLevelConfigEntry(gameWorld.levelsConfig, selectedIndex);
+    if (selectedEntry != nullptr) {
+        DrawText(TextFormat("Selected: %s", GetLevelDisplayName(*selectedEntry).c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 16, YELLOW);
+        actionY += 24.0f;
+        DrawText(TextFormat("Config: %s", selectedEntry->configPath.empty() ? "(planned)" : selectedEntry->configPath.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
+        actionY += 34.0f;
+    }
+
+    if (DebugButton(Rectangle{x + 14.0f, actionY, 110.0f, 28.0f}, "Load")) {
+        LoadConfiguredLevel(gameWorld, selectedIndex);
+    }
+    if (DebugButton(Rectangle{x + 134.0f, actionY, 110.0f, 28.0f}, "Move Up")) {
+        MoveLevelConfigEntry(gameWorld, selectedIndex, selectedIndex - 1);
+    }
+    if (DebugButton(Rectangle{x + 254.0f, actionY, 110.0f, 28.0f}, "Move Down")) {
+        MoveLevelConfigEntry(gameWorld, selectedIndex, selectedIndex + 1);
+    }
+
+    actionY += 44.0f;
+    DrawText("Edit add/remove/path vem depois.", static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
+}
+
 bool BeginDebugPanel(
     DebugUiState& ui,
     int panelId,
@@ -1818,7 +1841,11 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
             SetVectorInput(gameWorld.debugUi.gameTeleportInput, gameWorld.person.position);
             gameWorld.debugUi.activeMenu = -1;
         }
-        DebugMenuItem(Rectangle{dx, 128, 190, 30}, "Load Level", false);
+        if (DebugMenuItem(Rectangle{dx, 128, 190, 30}, "Load Level")) {
+            gameWorld.debugUi.levelLoadOpen = !gameWorld.debugUi.levelLoadOpen;
+            gameWorld.debugUi.levelSidebarOpen = false;
+            gameWorld.debugUi.activeMenu = -1;
+        }
     } else if (gameWorld.debugUi.activeMenu == 1) {
         float dx = static_cast<float>(menuX[1]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
@@ -1832,8 +1859,9 @@ void DrawDebugMenuBar(GameWorld& gameWorld) {
             SetVectorInput(gameWorld.debugUi.debugTeleportInput, gameWorld.camera.position);
             gameWorld.debugUi.activeMenu = -1;
         }
-        if (DebugMenuItem(Rectangle{dx, 128, 220, 30}, "Level Sidebar", true, gameWorld.debugUi.levelSidebarOpen)) {
+        if (DebugMenuItem(Rectangle{dx, 128, 220, 30}, "Inspector", true, gameWorld.debugUi.levelSidebarOpen)) {
             gameWorld.debugUi.levelSidebarOpen = !gameWorld.debugUi.levelSidebarOpen;
+            gameWorld.debugUi.levelLoadOpen = false;
         }
     } else if (gameWorld.debugUi.activeMenu == 2) {
         float dx = static_cast<float>(menuX[2]);
@@ -1854,6 +1882,7 @@ void DrawGameplay(GameWorld& gameWorld) {
     DrawLevel(gameWorld.level);
     DrawInteractableCharacters(gameWorld.interactions);
     if (gameWorld.debugUi.showForces) {
+        DrawLevelCollidersDebug(gameWorld.level);
         DrawPersonDebugCapsule(gameWorld);
         Vector3 feetPosition = gameWorld.person.position;
         DrawSphere(feetPosition, 0.05f, gameWorld.person.grounded ? GREEN : RED);
@@ -1895,6 +1924,7 @@ void DrawGameplay(GameWorld& gameWorld) {
     DrawDebugMenuBar(gameWorld);
     DrawDebugPanels(gameWorld);
     DrawLevelSidebar(gameWorld);
+    DrawLevelLoadSidebar(gameWorld);
     DrawInteractionUi(gameWorld.interactions);
     if (gameWorld.debugUi.enabled) {
         DrawDebugAxisGizmo(gameWorld.camera);
@@ -1905,6 +1935,7 @@ void DrawGameplay(GameWorld& gameWorld) {
 
 int main() {
     InitWindow(SCRWIDTH, SCRHEIGHT, "Dragon Rage");
+    SetExitKey(KEY_NULL);
     int monitor = GetCurrentMonitor();
     int monitorWidth = GetMonitorWidth(monitor);
     int monitorHeight = GetMonitorHeight(monitor);

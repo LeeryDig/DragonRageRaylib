@@ -13,7 +13,7 @@ struct LevelBoxVolume {
     Vector3 size;
 };
 
-struct LevelRoadSurface {
+struct LevelCollisionMesh {
     std::string name;
     Vector3 position;
     Quaternion rotation;
@@ -88,12 +88,12 @@ struct LevelData {
     std::vector<LevelDebugNode> originalDebugNodes;
     std::vector<LevelDebugGroup> debugGroups;
     std::vector<LevelBoxVolume> originalColliders;
-    std::vector<LevelRoadSurface> originalRoadSurfaces;
+    std::vector<LevelCollisionMesh> originalCollisionMeshes;
     std::vector<LevelCheckpoint> originalCheckpoints;
     LevelSpawn originalPlayerSpawn;
     LevelBoxVolume originalFinishLine;
     std::vector<LevelBoxVolume> colliders;
-    std::vector<LevelRoadSurface> roadSurfaces;
+    std::vector<LevelCollisionMesh> collisionMeshes;
     std::vector<LevelCheckpoint> checkpoints;
     LevelSpawn playerSpawn;
     LevelBoxVolume finishLine;
