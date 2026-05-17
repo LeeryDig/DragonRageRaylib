@@ -41,36 +41,6 @@ dist/linux/DragonRage-linux.tar.gz
 
 O diretório empacotado já inclui `resources/`, então o executável mantém os caminhos relativos esperados pelo jogo.
 
-## Build para Windows com Docker
-
-Este fluxo gera um executável de Windows sem precisar instalar `MinGW` ou `clang++` na sua máquina.
-
-### Requisito
-
-- Docker Desktop ou Docker Engine com `docker compose`
-
-### Comando
-
-```bash
-docker compose run --rm build-windows
-```
-
-### Saída
-
-Depois do build, o jogo fica disponível em:
-
-```bash
-dist/windows/DragonRage-windows/DragonRage.exe
-```
-
-Também é gerado um pacote zipado em:
-
-```bash
-dist/windows/DragonRage-windows.zip
-```
-
-O diretório empacotado já inclui `resources/`, então o executável mantém os caminhos relativos esperados pelo jogo.
-
 ## Build para macOS local
 
 ### Dependências
@@ -112,7 +82,7 @@ O pacote inclui `resources/`, então o executável mantém os caminhos relativos
 
 ## Build para macOS sem toolchain local
 
-Binário nativo de macOS não é gerado por este Docker de Windows. Para isso, o repositório inclui um workflow do GitHub Actions em `.github/workflows/build-macos.yml`.
+O repositório inclui um workflow do GitHub Actions em `.github/workflows/build-macos.yml`.
 
 ### Como usar
 
@@ -130,4 +100,4 @@ O workflow publica:
 
 ## Build local com CMake
 
-O projeto usa `CMake` como base de build para reutilizar a mesma configuração no Docker, macOS local e GitHub Actions.
+O projeto usa `CMake` como base de build para reutilizar a mesma configuração em builds locais e GitHub Actions.

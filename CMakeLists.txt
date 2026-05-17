@@ -35,7 +35,6 @@ add_executable(DragonRage ${DRAGONRAGE_SOURCES})
 target_include_directories(
     DragonRage
     PRIVATE
-        "${CMAKE_SOURCE_DIR}/include"
         "${CMAKE_SOURCE_DIR}/src"
 )
 
