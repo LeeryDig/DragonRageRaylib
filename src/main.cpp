@@ -50,6 +50,13 @@ const float CONTACT_SLOP = 0.001f;
 const float GRASS_HALF_WIDTH = 60.0f;
 const float GRASS_EXTRA_LENGTH = 200.0f;
 
+std::string DisplayNameFromPath(const std::string& path) {
+    std::size_t slash = path.find_last_of("/\\");
+    std::string filename = slash == std::string::npos ? path : path.substr(slash + 1);
+    std::size_t dot = filename.find_last_of('.');
+    return dot == std::string::npos ? filename : filename.substr(0, dot);
+}
+
 std::string FormatVector3(const Vector3& value) {
     std::ostringstream stream;
     stream << std::fixed << std::setprecision(4)
@@ -1405,7 +1412,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         bool selected = gameWorld.debugUi.selectedLevelNode == -2;
         bool hovered = CheckCollisionPointRec(GetMousePosition(), rootRow);
         DrawRectangleRec(rootRow, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-        DrawText(TextFormat("LEVEL %s", gameWorld.level.name.c_str()), static_cast<int>(rootRow.x + 6.0f), static_cast<int>(rootRow.y + 5.0f), 14, RAYWHITE);
+        std::string levelName = DisplayNameFromPath(gameWorld.level.name);
+        DrawText(TextFormat("LEVEL %s", levelName.c_str()), static_cast<int>(rootRow.x + 6.0f), static_cast<int>(rootRow.y + 5.0f), 14, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.selectedLevelNode = -2;
             SetVectorInput(gameWorld.debugUi.levelPositionInput, gameWorld.level.rootPosition);
@@ -1419,7 +1427,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             selected = gameWorld.debugUi.selectedLevelNode == selectionId;
             hovered = CheckCollisionPointRec(GetMousePosition(), row);
             DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-            DrawText(TextFormat("CHAR %s", character.modelPath.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
+            std::string characterName = DisplayNameFromPath(character.modelPath);
+            DrawText(TextFormat("CHAR %s", characterName.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
             if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 gameWorld.debugUi.selectedLevelNode = selectionId;
                 SetVectorInput(gameWorld.debugUi.levelPositionInput, character.rootPosition);
@@ -1458,7 +1467,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         bool selected = gameWorld.debugUi.selectedLevelNode == static_cast<int>(i);
         bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
         DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-        DrawText(TextFormat("LEVEL %s", node.name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
+        std::string nodeName = DisplayNameFromPath(node.name);
+        DrawText(TextFormat("LEVEL %s", nodeName.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.selectedLevelNode = static_cast<int>(i);
             SetLevelNodeInputs(gameWorld.debugUi, node);
@@ -1475,7 +1485,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 bool selected = gameWorld.debugUi.selectedLevelNode == selectionId;
                 bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
                 DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-                DrawText(TextFormat("CHAR %s/%s", character.modelPath.c_str(), character.visualParts[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
+                std::string characterName = DisplayNameFromPath(character.modelPath);
+                DrawText(TextFormat("CHAR %s/%s", characterName.c_str(), character.visualParts[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gameWorld.debugUi.selectedLevelNode = selectionId;
                 ++drawn;
             }
@@ -1487,7 +1498,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 bool selected = gameWorld.debugUi.selectedLevelNode == selectionId;
                 bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
                 DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-                DrawText(TextFormat("CHAR %s/%s", character.modelPath.c_str(), character.colliders[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
+                std::string characterName = DisplayNameFromPath(character.modelPath);
+                DrawText(TextFormat("CHAR %s/%s", characterName.c_str(), character.colliders[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gameWorld.debugUi.selectedLevelNode = selectionId;
                 ++drawn;
             }
@@ -1499,7 +1511,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 bool selected = gameWorld.debugUi.selectedLevelNode == selectionId;
                 bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
                 DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-                DrawText(TextFormat("CHAR %s/%s", character.modelPath.c_str(), character.iconParts[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
+                std::string characterName = DisplayNameFromPath(character.modelPath);
+                DrawText(TextFormat("CHAR %s/%s", characterName.c_str(), character.iconParts[p].name.c_str()), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gameWorld.debugUi.selectedLevelNode = selectionId;
                 ++drawn;
             }
@@ -1602,7 +1615,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             if (selectedCharacterPartKind == 0 && selectedCharacterPartIndex < static_cast<int>(character.visualParts.size())) partName = character.visualParts[selectedCharacterPartIndex].name.c_str();
             if (selectedCharacterPartKind == 1 && selectedCharacterPartIndex < static_cast<int>(character.colliders.size())) partName = character.colliders[selectedCharacterPartIndex].name.c_str();
             if (selectedCharacterPartKind == 2 && selectedCharacterPartIndex < static_cast<int>(character.iconParts.size())) partName = character.iconParts[selectedCharacterPartIndex].name.c_str();
-            DrawText(TextFormat("CHAR %s", character.modelPath.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
+            std::string characterName = DisplayNameFromPath(character.modelPath);
+            DrawText(TextFormat("CHAR %s", characterName.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
             DrawText(TextFormat("%s %s", kindName, partName), static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, LIGHTGRAY); editY += 22.0f;
             DrawText("Part read-only. Use ROOT/CHAR to move whole GLB.", static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE);
         }
@@ -1610,7 +1624,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
 
     if (gameWorld.debugUi.selectedLevelNode >= 0 && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.level.debugNodes.size())) {
         const LevelDebugNode& node = gameWorld.level.debugNodes[gameWorld.debugUi.selectedLevelNode];
-        DrawText(node.name.c_str(), static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
+        std::string nodeName = DisplayNameFromPath(node.name);
+        DrawText(nodeName.c_str(), static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
         DrawText(LevelDebugNodeKindName(node.kind), static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, GRAY); editY += 24.0f;
         if (node.kind == LevelDebugNodeKind::Visual) {
             DrawText("VISUAL read-only: level render voltou para DrawModel().", static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE);

@@ -22,6 +22,21 @@ bool IsSkyboxFile(const std::filesystem::path& path) {
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".hdr" || ext == ".ktx";
 }
 
+std::string FileNameFromPath(const std::string& path) {
+    return std::filesystem::path(path).filename().string();
+}
+
+std::string DisplayNameFromPath(const std::string& path) {
+    std::filesystem::path filePath(path);
+    std::string stem = filePath.stem().string();
+    return stem.empty() ? FileNameFromPath(path) : stem;
+}
+
+std::string LevelEntryLabel(const LevelConfigEntry& entry) {
+    std::string display = GetLevelDisplayName(entry);
+    return DisplayNameFromPath(display.empty() ? entry.path : display);
+}
+
 std::vector<std::string> ListSkyboxPaths() {
     std::vector<std::string> paths;
     const std::string rootRelative = "resources/assets/skybox";
@@ -65,7 +80,8 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
 
     float y = 116.0f;
     if (gameWorld.debugUi.levelConfigTab == 0) {
-        DrawText(gameWorld.currentLevelConfigPath.empty() ? "No .json for current level" : gameWorld.currentLevelConfigPath.c_str(), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
+        std::string configLabel = gameWorld.currentLevelConfigPath.empty() ? "No .json for current level" : FileNameFromPath(gameWorld.currentLevelConfigPath);
+        DrawText(configLabel.c_str(), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
         y += 28.0f;
 
         std::vector<std::string> skyboxes = ListSkyboxPaths();
@@ -90,7 +106,8 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
             bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
             DrawRectangleRec(row, current ? Color{80, 100, 80, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
             DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
-            DrawText(path.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 10.0f), 14, RAYWHITE);
+            std::string label = FileNameFromPath(path);
+            DrawText(label.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 10.0f), 14, RAYWHITE);
             if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !current && !gameWorld.currentLevelConfigPath.empty()) {
                 gameWorld.currentLevelRuntimeConfig.skyboxPath = path;
                 if (actions.saveCurrentLevelRuntimeConfig) actions.saveCurrentLevelRuntimeConfig(gameWorld);
@@ -99,7 +116,8 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         }
 
         float bottomY = y + visibleRows * rowH + 12.0f;
-        DrawText(TextFormat("Current: %s", gameWorld.currentLevelRuntimeConfig.skyboxPath.empty() ? "(none)" : gameWorld.currentLevelRuntimeConfig.skyboxPath.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(bottomY), 14, LIGHTGRAY);
+        std::string currentLabel = gameWorld.currentLevelRuntimeConfig.skyboxPath.empty() ? "(none)" : FileNameFromPath(gameWorld.currentLevelRuntimeConfig.skyboxPath);
+        DrawText(TextFormat("Current: %s", currentLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(bottomY), 14, LIGHTGRAY);
         return;
     }
 
@@ -127,8 +145,9 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
         DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
         DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
-        DrawText(TextFormat("%d. %s%s", levelIndex + 1, GetLevelDisplayName(entry).c_str(), current ? "  [loaded]" : ""), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 6.0f), 16, RAYWHITE);
-        DrawText(entry.path.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 25.0f), 13, LIGHTGRAY);
+        std::string levelLabel = LevelEntryLabel(entry);
+        DrawText(TextFormat("%d. %s%s", levelIndex + 1, levelLabel.c_str(), current ? "  [loaded]" : ""), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 6.0f), 16, RAYWHITE);
+        DrawText(TextFormat("Level file: %s", FileNameFromPath(entry.path).c_str()), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 25.0f), 13, LIGHTGRAY);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.selectedLevelConfigIndex = levelIndex;
         }
@@ -138,9 +157,11 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
     int selectedIndex = gameWorld.debugUi.selectedLevelConfigIndex;
     const LevelConfigEntry* selectedEntry = GetLevelConfigEntry(gameWorld.levelsConfig, selectedIndex);
     if (selectedEntry != nullptr) {
-        DrawText(TextFormat("Selected: %s", GetLevelDisplayName(*selectedEntry).c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 16, YELLOW);
+        std::string selectedLabel = LevelEntryLabel(*selectedEntry);
+        DrawText(TextFormat("Selected: %s", selectedLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 16, YELLOW);
         actionY += 24.0f;
-        DrawText(TextFormat("Config: %s", selectedEntry->configPath.empty() ? "(planned)" : selectedEntry->configPath.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
+        std::string selectedConfigLabel = selectedEntry->configPath.empty() ? "(planned)" : FileNameFromPath(selectedEntry->configPath);
+        DrawText(TextFormat("Config: %s", selectedConfigLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
         actionY += 34.0f;
     }
 
