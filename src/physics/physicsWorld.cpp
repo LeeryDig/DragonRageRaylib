@@ -143,7 +143,7 @@ void PhysicsWorld::Step(float deltaTime) {
                             colliderB.GetMask())) {
                         continue;
                     }
-                    if (ComputeBodyBoxOverlap(bodyA, colliderA, bodyB, colliderB, overlap)) {
+                    if (ComputeBodyOverlap(bodyA, colliderA, bodyB, colliderB, overlap)) {
                         pairCollided = true;
                         break;
                     }

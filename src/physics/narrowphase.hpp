@@ -12,6 +12,13 @@ struct OverlapResult {
     ContactPoint point;
 };
 
+bool ComputeBodyOverlap(
+    const PhysicsBody& bodyA,
+    const Collider& colliderA,
+    const PhysicsBody& bodyB,
+    const Collider& colliderB,
+    OverlapResult& result);
+
 bool ComputeBodyBoxOverlap(
     const PhysicsBody& bodyA,
     const Collider& colliderA,

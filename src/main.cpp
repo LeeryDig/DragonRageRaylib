@@ -15,12 +15,17 @@
 #include <vector>
 
 #include "debug/cameraDebug.hpp"
+#include "debug/levelDebugDraw.hpp"
+#include "debug/ui/debugUi.hpp"
+#include "game/gameWorld.hpp"
 #include "gameState.hpp"
 #include "interactionSystem.hpp"
 #include "physics/collisionLayers.hpp"
 #include "physics/physicsMaterial.hpp"
 #include "physics/physicsWorld.hpp"
+#include "physics/jolt/joltWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
+#include "physics/shapes/meshShape.hpp"
 #include "level/levelLoader.hpp"
 #include "level/levelsConfig.hpp"
 #include "personController.hpp"
@@ -37,7 +42,6 @@ const int SCRWIDTH = 1280;
 const int SCRHEIGHT = 720;
 const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
 const char* PERSON_CONFIG_PATH = "resources/config/person.json";
-const char* CHARACTER_CONFIG_PATH = "resources/character/chartest.json";
 const char* LEVELS_CONFIG_PATH = "resources/config/levels.json";
 const float SPAWN_FRONT_UP_DEGREES = 25.0f;
 const float CONTACT_RESTITUTION = 0.0f;
@@ -45,74 +49,6 @@ const float CONTACT_POSITION_PERCENT = 0.75f;
 const float CONTACT_SLOP = 0.001f;
 const float GRASS_HALF_WIDTH = 60.0f;
 const float GRASS_EXTRA_LENGTH = 200.0f;
-
-struct CarVisual {
-    Model model;
-    Texture2D texture;
-    Vector3 scale;
-};
-
-struct DebugUiState {
-    bool enabled;
-    bool freeCameraActive;
-    bool showForces;
-    bool showVehicleStatus;
-    bool showVehiclePanel;
-    bool showPhysicsPanel;
-    bool pinVehicleStatus;
-    bool pinVehiclePanel;
-    bool pinPhysicsPanel;
-    Vector2 vehicleStatusPos;
-    Vector2 vehiclePanelPos;
-    Vector2 physicsPanelPos;
-    bool debugTeleportOpen;
-    bool gameTeleportOpen;
-    bool levelSidebarOpen;
-    bool levelLoadOpen;
-    Vector2 debugTeleportPos;
-    Vector2 gameTeleportPos;
-    std::string debugTeleportInput[3];
-    std::string gameTeleportInput[3];
-    std::string levelPositionInput[3];
-    std::string levelRotationInput[3];
-    std::string levelScaleInput[3];
-    int levelSidebarTab;
-    int levelSidebarScroll;
-    int selectedLevelNode;
-    int selectedLevelConfigIndex;
-    int levelLoadScroll;
-    int activeTextField;
-    int activeMenu;
-    int draggingPanel;
-    Vector2 dragOffset;
-};
-
-struct GameWorld {
-    StaticWorld world;
-    LevelsConfig levelsConfig;
-    LevelData level;
-    int currentLevelConfigIndex;
-    std::string currentLevelPath;
-    PersonConfig personConfig;
-    PersonState person;
-    InteractionSystem interactions;
-    VehicleConfig vehicleConfig;
-    VehicleState vehicle;
-    physics::PhysicsWorld physicsWorld;
-    physics::RigidBody* vehicleBody;
-    std::vector<physics::StaticBody*> levelBodies;
-    std::vector<std::shared_ptr<const physics::BoxShape> > levelShapes;
-    std::shared_ptr<const physics::BoxShape> vehicleShape;
-    CarVisual visual;
-    Camera camera;
-    ChaseCameraConfig chaseCamera;
-    DebugCameraState debugCamera;
-    DebugUiState debugUi;
-    float physicsAccumulator;
-    float logElapsedSeconds;
-    unsigned int logFrameIndex;
-    std::vector<std::string> vehicleLogLines;
-};
 
 std::string FormatVector3(const Vector3& value) {
     std::ostringstream stream;
@@ -741,8 +677,8 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
 
     gameWorld.levelBodies.clear();
     gameWorld.levelShapes.clear();
-    gameWorld.levelBodies.reserve(gameWorld.level.colliders.size());
-    gameWorld.levelShapes.reserve(gameWorld.level.colliders.size());
+    gameWorld.levelBodies.reserve(gameWorld.level.colliders.size() + gameWorld.level.collisionMeshes.size());
+    gameWorld.levelShapes.reserve(gameWorld.level.colliders.size() + gameWorld.level.collisionMeshes.size());
 
     for (std::size_t i = 0; i < gameWorld.level.colliders.size(); ++i) {
         const LevelBoxVolume& levelCollider = gameWorld.level.colliders[i];
@@ -760,6 +696,31 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
         colliderDesc.layer = physics::ToMask(physics::CollisionLayer::World);
         colliderDesc.mask = physics::ToMask(physics::CollisionLayer::Vehicle);
         colliderDesc.material.name = levelCollider.name;
+        colliderDesc.material.friction = 1.0f;
+        staticBody->AddCollider(colliderDesc);
+        gameWorld.levelBodies.push_back(staticBody);
+    }
+
+    for (std::size_t i = 0; i < gameWorld.level.collisionMeshes.size(); ++i) {
+        const LevelCollisionMesh& levelMesh = gameWorld.level.collisionMeshes[i];
+        if (levelMesh.vertices.empty() || levelMesh.indices.size() < 3) {
+            continue;
+        }
+
+        physics::StaticBodyDesc staticDesc;
+        staticDesc.transform = BuildTransform(Vector3{0.0f, 0.0f, 0.0f}, Quaternion{0.0f, 0.0f, 0.0f, 1.0f});
+        staticDesc.defaultLayer = physics::ToMask(physics::CollisionLayer::World);
+        staticDesc.defaultMask = physics::ToMask(physics::CollisionLayer::Vehicle);
+        physics::StaticBody* staticBody = gameWorld.physicsWorld.CreateStaticBody(staticDesc);
+
+        std::shared_ptr<const physics::MeshShape> shape(new physics::MeshShape(levelMesh.vertices, levelMesh.indices, levelMesh.name));
+        gameWorld.levelShapes.push_back(shape);
+
+        physics::ColliderDesc colliderDesc;
+        colliderDesc.shape = shape;
+        colliderDesc.layer = physics::ToMask(physics::CollisionLayer::World);
+        colliderDesc.mask = physics::ToMask(physics::CollisionLayer::Vehicle);
+        colliderDesc.material.name = levelMesh.name;
         colliderDesc.material.friction = 1.0f;
         staticBody->AddCollider(colliderDesc);
         gameWorld.levelBodies.push_back(staticBody);
@@ -788,6 +749,14 @@ void ConfigurePhysicsScene(GameWorld& gameWorld) {
     SyncBodyFromVehicleState(*gameWorld.vehicleBody, gameWorld.vehicle);
     gameWorld.physicsWorld.Step(0.0f);
     SyncVehicleStateFromBody(gameWorld.vehicle, *gameWorld.vehicleBody);
+}
+
+void ReloadJoltLevelPhysics(GameWorld& gameWorld) {
+    if (!gameWorld.joltWorld || !gameWorld.joltWorld->IsReady()) {
+        return;
+    }
+    gameWorld.joltWorld->LoadLevel(gameWorld.level);
+    gameWorld.joltWorld->CreateCharacter(gameWorld.personConfig, gameWorld.person.position);
 }
 
 void DrawForceArrow(Vector3 origin, Vector3 force, float scale, Color color) {
@@ -842,9 +811,13 @@ void ResetGameWorld(GameWorld& gameWorld) {
     }
 
     ResetPersonState(gameWorld.person, gameWorld.personConfig, spawnPosition, spawnYaw);
+    if (gameWorld.joltWorld && gameWorld.joltWorld->IsReady()) {
+        gameWorld.joltWorld->LoadLevel(gameWorld.level);
+        gameWorld.joltWorld->CreateCharacter(gameWorld.personConfig, gameWorld.person.position);
+    }
     Vector3 groundPoint = Vector3Zero();
     Vector3 groundNormal = Vector3{0.0f, 1.0f, 0.0f};
-    if (SampleGroundAtPoint(gameWorld, gameWorld.person.position, groundPoint, groundNormal)) {
+    if ((!gameWorld.joltWorld || !gameWorld.joltWorld->IsReady()) && SampleGroundAtPoint(gameWorld, gameWorld.person.position, groundPoint, groundNormal)) {
         gameWorld.person.position.y = groundPoint.y;
         gameWorld.person.grounded = true;
     }
@@ -863,6 +836,8 @@ void ResetGameWorld(GameWorld& gameWorld) {
 
 GameWorld LoadGameWorld() {
     GameWorld gameWorld = {};
+    gameWorld.joltWorld.reset(new physics_jolt::JoltWorld());
+    gameWorld.joltWorld->Init();
     gameWorld.vehicleBody = nullptr;
     gameWorld.logElapsedSeconds = 0.0f;
     gameWorld.logFrameIndex = 0;
@@ -888,12 +863,14 @@ GameWorld LoadGameWorld() {
     gameWorld.currentLevelConfigIndex = 0;
     const LevelConfigEntry* initialLevel = GetLevelConfigEntry(gameWorld.levelsConfig, gameWorld.currentLevelConfigIndex);
     gameWorld.currentLevelPath = initialLevel != nullptr ? initialLevel->path : std::string();
-    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
+    gameWorld.currentLevelConfigPath = initialLevel != nullptr ? initialLevel->configPath : std::string();
+    gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
-    gameWorld.interactions = LoadInteractionSystem(Utils::ResolveProjectPath(CHARACTER_CONFIG_PATH));
+    gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
     gameWorld.chaseCamera = LoadChaseCameraConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
         fallbackChaseCamera);
@@ -917,6 +894,7 @@ GameWorld LoadGameWorld() {
         false,
         false,
         false,
+        false,
         Vector2{20.0f, 190.0f},
         Vector2{20.0f, 330.0f},
         {"0", "0", "0"},
@@ -927,6 +905,14 @@ GameWorld LoadGameWorld() {
         0,
         0,
         -1,
+        0,
+        0,
+        -1,
+        false,
+        Vector2{0.0f, 0.0f},
+        false,
+        0,
+        0,
         0,
         0,
         0,
@@ -942,6 +928,9 @@ GameWorld LoadGameWorld() {
 
 void UnloadGameWorld(GameWorld& gameWorld) {
     EnableCursor();
+    if (gameWorld.joltWorld) {
+        gameWorld.joltWorld->Shutdown();
+    }
     UnloadInteractionSystem(gameWorld.interactions);
     UnloadLevel(gameWorld.level);
     UnloadStaticWorld(gameWorld.world);
@@ -984,13 +973,18 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     while (gameWorld.physicsAccumulator >= physicsStep && steps < 8) {
         UpdatePersonHorizontalMovement(gameWorld.person, gameWorld.personConfig, input, physicsStep);
 
-        gameWorld.person.velocity.y -= gameWorld.personConfig.gravity * physicsStep;
-        gameWorld.person.position = Vector3Add(
-            gameWorld.person.position,
-            Vector3Scale(gameWorld.person.velocity, physicsStep));
-        ResolvePersonLevelCollisions(gameWorld.level, gameWorld.person, gameWorld.personConfig);
+        if (gameWorld.joltWorld && gameWorld.joltWorld->IsReady() && gameWorld.joltWorld->HasCharacter()) {
+            Vector3 horizontalVelocity = Vector3{gameWorld.person.velocity.x, 0.0f, gameWorld.person.velocity.z};
+            gameWorld.joltWorld->UpdateCharacter(gameWorld.person, gameWorld.personConfig, horizontalVelocity, physicsStep);
+        } else {
+            gameWorld.person.velocity.y -= gameWorld.personConfig.gravity * physicsStep;
+            gameWorld.person.position = Vector3Add(
+                gameWorld.person.position,
+                Vector3Scale(gameWorld.person.velocity, physicsStep));
+            ResolvePersonLevelCollisions(gameWorld.level, gameWorld.person, gameWorld.personConfig);
+            ApplyPersonGroundSnap(gameWorld.level, gameWorld.person, gameWorld.personConfig);
+        }
         ResolveCharacterCollisions(gameWorld.interactions, gameWorld.person.position, gameWorld.personConfig.capsuleRadius);
-        ApplyPersonGroundSnap(gameWorld.level, gameWorld.person, gameWorld.personConfig);
 
         gameWorld.physicsAccumulator -= physicsStep;
         ++steps;
@@ -1011,100 +1005,6 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     }
 }
 
-void DrawLevelCollidersDebug(const LevelData& level) {
-    for (std::size_t i = 0; i < level.collisionMeshes.size(); ++i) {
-        const LevelCollisionMesh& mesh = level.collisionMeshes[i];
-        for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
-            unsigned int ia = mesh.indices[t];
-            unsigned int ib = mesh.indices[t + 1];
-            unsigned int ic = mesh.indices[t + 2];
-            if (ia < mesh.vertices.size() && ib < mesh.vertices.size() && ic < mesh.vertices.size()) {
-                DrawLine3D(mesh.vertices[ia], mesh.vertices[ib], GREEN);
-                DrawLine3D(mesh.vertices[ib], mesh.vertices[ic], GREEN);
-                DrawLine3D(mesh.vertices[ic], mesh.vertices[ia], GREEN);
-            }
-        }
-    }
-}
-
-void DrawPersonDebugCapsule(const GameWorld& gameWorld) {
-    Vector3 capsuleBottom = Vector3Add(
-        gameWorld.person.position,
-        Vector3{0.0f, gameWorld.personConfig.capsuleRadius, 0.0f});
-    Vector3 capsuleTop = Vector3Add(
-        gameWorld.person.position,
-        Vector3{0.0f, gameWorld.personConfig.capsuleRadius + gameWorld.personConfig.capsuleHeight, 0.0f});
-    DrawCapsuleWires(
-        capsuleBottom,
-        capsuleTop,
-        gameWorld.personConfig.capsuleRadius,
-        12,
-        6,
-        gameWorld.person.grounded ? GREEN : RED);
-
-    Vector3 eyePosition = Vector3Add(gameWorld.person.position, Vector3{0.0f, gameWorld.personConfig.eyeHeight, 0.0f});
-    DrawSphere(eyePosition, 0.05f, BLUE);
-    DrawLine3D(eyePosition, Vector3Add(eyePosition, Vector3Scale(GetPersonCameraForward(gameWorld.person), 0.8f)), BLUE);
-}
-
-struct DebugAxisGizmoAxis {
-    const char* label;
-    Vector3 direction;
-    Color color;
-    float depth;
-    Vector2 screenEnd;
-};
-
-void DrawDebugAxisGizmo(const Camera& camera) {
-    const float gizmoSize = 82.0f;
-    const float axisLength = 31.0f;
-    const float headRadius = 9.0f;
-    const Vector2 center = Vector2{
-        static_cast<float>(GetScreenWidth()) - gizmoSize,
-        92.0f};
-
-    Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, camera.up));
-    Vector3 up = Vector3Normalize(Vector3CrossProduct(right, forward));
-
-    DebugAxisGizmoAxis axes[3] = {
-        DebugAxisGizmoAxis{"X", Vector3{1.0f, 0.0f, 0.0f}, Color{235, 70, 80, 255}, 0.0f, Vector2Zero()},
-        DebugAxisGizmoAxis{"Y", Vector3{0.0f, 1.0f, 0.0f}, Color{120, 220, 50, 255}, 0.0f, Vector2Zero()},
-        DebugAxisGizmoAxis{"Z", Vector3{0.0f, 0.0f, 1.0f}, Color{70, 150, 240, 255}, 0.0f, Vector2Zero()}
-    };
-
-    for (int i = 0; i < 3; ++i) {
-        axes[i].depth = Vector3DotProduct(axes[i].direction, forward);
-        axes[i].screenEnd = Vector2{
-            center.x + Vector3DotProduct(axes[i].direction, right) * axisLength,
-            center.y - Vector3DotProduct(axes[i].direction, up) * axisLength};
-    }
-
-    std::sort(
-        axes,
-        axes + 3,
-        [](const DebugAxisGizmoAxis& a, const DebugAxisGizmoAxis& b) {
-            return a.depth < b.depth;
-        });
-
-    DrawCircleV(center, 4.0f, Color{210, 210, 210, 210});
-    DrawCircleLines(static_cast<int>(center.x), static_cast<int>(center.y), axisLength, Color{120, 120, 120, 90});
-
-    for (int i = 0; i < 3; ++i) {
-        const DebugAxisGizmoAxis& axis = axes[i];
-        DrawLineEx(center, axis.screenEnd, 3.0f, axis.color);
-        DrawCircleV(axis.screenEnd, headRadius, axis.color);
-        DrawCircleLines(static_cast<int>(axis.screenEnd.x), static_cast<int>(axis.screenEnd.y), headRadius, Color{230, 230, 230, 180});
-        int textWidth = MeasureText(axis.label, 14);
-        DrawText(
-            axis.label,
-            static_cast<int>(axis.screenEnd.x - textWidth * 0.5f),
-            static_cast<int>(axis.screenEnd.y - 7.0f),
-            14,
-            RAYWHITE);
-    }
-}
-
 bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool checked = false) {
     Vector2 mouse = GetMousePosition();
     bool hovered = enabled && CheckCollisionPointRec(mouse, rect);
@@ -1119,13 +1019,15 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool c
 
 void RestartLevel(GameWorld& gameWorld) {
     UnloadLevel(gameWorld.level);
-    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
+    gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
+    gameWorld.debugUi.levelConfigDirty = false;
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
     UnloadInteractionSystem(gameWorld.interactions);
-    gameWorld.interactions = LoadInteractionSystem(Utils::ResolveProjectPath(CHARACTER_CONFIG_PATH));
+    gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
     ResetGameWorld(gameWorld);
 }
 
@@ -1136,13 +1038,16 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
     UnloadLevel(gameWorld.level);
     gameWorld.currentLevelConfigIndex = levelIndex;
     gameWorld.currentLevelPath = entry->path;
-    gameWorld.level = LoadLevel(gameWorld.currentLevelPath);
+    gameWorld.currentLevelConfigPath = entry->configPath;
+    gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
+    gameWorld.debugUi.levelConfigDirty = false;
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
     UnloadInteractionSystem(gameWorld.interactions);
-    gameWorld.interactions = LoadInteractionSystem(Utils::ResolveProjectPath(CHARACTER_CONFIG_PATH));
+    gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
     gameWorld.debugUi.selectedLevelNode = -1;
     gameWorld.debugUi.levelSidebarScroll = 0;
     gameWorld.debugUi.activeMenu = -1;
@@ -1247,7 +1152,68 @@ void ApplySelectedLevelNodeInputs(GameWorld& gameWorld) {
     if (!ParseVectorInput(gameWorld.debugUi.levelRotationInput, rotationDegrees)) return;
     if (!ParseVectorInput(gameWorld.debugUi.levelScaleInput, scale)) return;
     ApplyLevelDebugNodeTransform(gameWorld.level, gameWorld.debugUi.selectedLevelNode, position, QuaternionFromEulerDegrees(rotationDegrees), scale);
-    ConfigurePhysicsScene(gameWorld);
+    ReloadJoltLevelPhysics(gameWorld);
+}
+
+bool GetSelectedTransform(GameWorld& gameWorld, Vector3& position, Quaternion& rotation, Vector3& scale, bool& saveToLevelConfig) {
+    saveToLevelConfig = false;
+    scale = Vector3{1.0f, 1.0f, 1.0f};
+    if (gameWorld.debugUi.selectedLevelNode == -2) {
+        position = gameWorld.level.rootPosition;
+        rotation = gameWorld.level.rootRotation;
+        return true;
+    }
+    if (gameWorld.debugUi.selectedLevelNode <= -1000 && gameWorld.debugUi.selectedLevelNode > -200000) {
+        int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (characterIndex < 0 || characterIndex >= static_cast<int>(gameWorld.interactions.characters.size())) return false;
+        position = gameWorld.interactions.characters[characterIndex].rootPosition;
+        rotation = gameWorld.interactions.characters[characterIndex].rootRotation;
+        saveToLevelConfig = true;
+        return true;
+    }
+    if (gameWorld.debugUi.selectedLevelNode >= 0 && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.level.debugNodes.size())) {
+        const LevelDebugNode& node = gameWorld.level.debugNodes[gameWorld.debugUi.selectedLevelNode];
+        position = node.position;
+        rotation = node.rotation;
+        scale = node.scale;
+        return node.kind != LevelDebugNodeKind::Visual;
+    }
+    return false;
+}
+
+void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rotation, Vector3 scale) {
+    if (gameWorld.debugUi.selectedLevelNode == -2) {
+        ApplyLevelRootTransform(gameWorld.level, position, rotation);
+        ReloadJoltLevelPhysics(gameWorld);
+    } else if (gameWorld.debugUi.selectedLevelNode <= -1000 && gameWorld.debugUi.selectedLevelNode > -200000) {
+        int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
+            ApplyCharacterRootTransform(gameWorld.interactions.characters[characterIndex], position, rotation);
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+    } else if (gameWorld.debugUi.selectedLevelNode >= 0 && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.level.debugNodes.size())) {
+        ApplyLevelDebugNodeTransform(gameWorld.level, gameWorld.debugUi.selectedLevelNode, position, rotation, scale);
+        ReloadJoltLevelPhysics(gameWorld);
+    }
+    SetVectorInput(gameWorld.debugUi.levelPositionInput, position);
+    SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(rotation));
+    SetVectorInput(gameWorld.debugUi.levelScaleInput, scale);
+}
+
+void SaveCurrentLevelRuntimeConfig(GameWorld& gameWorld) {
+    for (std::size_t i = 0; i < gameWorld.currentLevelRuntimeConfig.characters.size() && i < gameWorld.interactions.characters.size(); ++i) {
+        gameWorld.currentLevelRuntimeConfig.characters[i].position = gameWorld.interactions.characters[i].rootPosition;
+        gameWorld.currentLevelRuntimeConfig.characters[i].rotationDegrees = EulerDegreesFromQuaternion(gameWorld.interactions.characters[i].rootRotation);
+    }
+    if (SaveLevelRuntimeConfig(gameWorld.currentLevelConfigPath, gameWorld.currentLevelRuntimeConfig)) {
+        gameWorld.debugUi.levelConfigDirty = false;
+    }
+}
+
+void ReloadCurrentLevelForConfig(GameWorld& gameWorld) {
+    UnloadLevel(gameWorld.level);
+    gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
+    ResetGameWorld(gameWorld);
 }
 
 bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fieldId, DebugUiState& ui) {
@@ -1335,6 +1301,69 @@ void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
     DrawText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z), static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
 }
 
+void DrawTransformGizmo(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.enabled || !gameWorld.debugUi.levelSidebarOpen || gameWorld.debugUi.transformGizmoMode == 0) return;
+
+    Vector3 position = Vector3Zero();
+    Quaternion rotation = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+    Vector3 scale = Vector3{1.0f, 1.0f, 1.0f};
+    bool saveToConfig = false;
+    if (!GetSelectedTransform(gameWorld, position, rotation, scale, saveToConfig)) return;
+
+    const Vector3 axes[3] = {
+        Vector3{1.0f, 0.0f, 0.0f},
+        Vector3{0.0f, 1.0f, 0.0f},
+        Vector3{0.0f, 0.0f, 1.0f}
+    };
+    const Color colors[3] = {RED, GREEN, BLUE};
+    Vector2 mouse = GetMousePosition();
+
+    float bestDistance = 99999.0f;
+    int hoveredAxis = -1;
+    for (int i = 0; i < 3; ++i) {
+        Vector3 axis = gameWorld.debugUi.transformGizmoMode == 2 ? Vector3RotateByQuaternion(axes[i], rotation) : axes[i];
+        Vector3 end = Vector3Add(position, Vector3Scale(axis, 1.6f));
+        DrawLine3D(position, end, colors[i]);
+        DrawSphere(end, 0.08f, colors[i]);
+        Vector2 screenEnd = GetWorldToScreen(end, gameWorld.camera);
+        float distance = Vector2Distance(mouse, screenEnd);
+        if (distance < bestDistance && distance < 18.0f) {
+            bestDistance = distance;
+            hoveredAxis = i;
+        }
+    }
+
+    if (!gameWorld.debugUi.draggingTransformGizmo && hoveredAxis >= 0 && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        gameWorld.debugUi.draggingTransformGizmo = true;
+        gameWorld.debugUi.transformGizmoAxis = hoveredAxis;
+        gameWorld.debugUi.transformGizmoLastMouse = mouse;
+    }
+    if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        gameWorld.debugUi.draggingTransformGizmo = false;
+        gameWorld.debugUi.transformGizmoAxis = -1;
+    }
+    if (!gameWorld.debugUi.draggingTransformGizmo || gameWorld.debugUi.transformGizmoAxis < 0) return;
+
+    Vector2 delta = Vector2Subtract(mouse, gameWorld.debugUi.transformGizmoLastMouse);
+    gameWorld.debugUi.transformGizmoLastMouse = mouse;
+    int axisIndex = gameWorld.debugUi.transformGizmoAxis;
+    Vector3 axis = gameWorld.debugUi.transformGizmoMode == 2 ? Vector3RotateByQuaternion(axes[axisIndex], rotation) : axes[axisIndex];
+    Vector2 screenPos = GetWorldToScreen(position, gameWorld.camera);
+    Vector2 screenAxis = Vector2Subtract(GetWorldToScreen(Vector3Add(position, axis), gameWorld.camera), screenPos);
+    float screenAxisLen = Vector2Length(screenAxis);
+    if (screenAxisLen <= 0.001f) return;
+    screenAxis = Vector2Scale(screenAxis, 1.0f / screenAxisLen);
+    float mouseAlongAxis = Vector2DotProduct(delta, screenAxis);
+
+    if (gameWorld.debugUi.transformGizmoMode == 1) {
+        position = Vector3Add(position, Vector3Scale(axis, mouseAlongAxis * 0.025f));
+    } else if (gameWorld.debugUi.transformGizmoMode == 2) {
+        Quaternion deltaRotation = QuaternionFromAxisAngle(axis, mouseAlongAxis * 0.01f);
+        rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, rotation));
+    }
+    SetSelectedTransform(gameWorld, position, rotation, scale);
+}
+
 bool LevelNodeMatchesTab(const LevelDebugNode& node, int tab) {
     if (tab == 1) return node.kind == LevelDebugNodeKind::Visual;
     if (tab == 2) return node.kind == LevelDebugNodeKind::Collider;
@@ -1353,10 +1382,11 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
     Rectangle panel = Rectangle{x, 34.0f, width, h};
     DrawRectangleRec(panel, Color{24, 24, 30, 235});
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
+    gameWorld.debugUi.levelSidebarTab = 0;
     DrawText("Inspector", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
-    const char* tabs[] = {"ROOT", "VIS", "COL", "ICON", "SP/TR", "OTHER"};
-    for (int i = 0; i < 6; ++i) {
+    const char* tabs[] = {"ROOT"};
+    for (int i = 0; i < 1; ++i) {
         Rectangle tab = Rectangle{x + 12.0f + i * 56.0f, 74.0f, 52.0f, 26.0f};
         bool active = gameWorld.debugUi.levelSidebarTab == i;
         bool hovered = CheckCollisionPointRec(GetMousePosition(), tab);
@@ -1494,7 +1524,10 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelRotationInput[0], 404, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 405, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 406, gameWorld.debugUi) || changed;
-        editY += 38.0f;
+        editY += 34.0f;
+        if (DebugButton(Rectangle{x + 14.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 1 ? "Move ON" : "Move")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 1 ? 0 : 1;
+        if (DebugButton(Rectangle{x + 120.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 2 ? "Rotate ON" : "Rotate")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 2 ? 0 : 2;
+        editY += 34.0f;
 
         if (changed) {
             Vector3 position = Vector3Zero();
@@ -1504,10 +1537,11 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                     int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
                     if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
                         ApplyCharacterRootTransform(gameWorld.interactions.characters[characterIndex], position, QuaternionFromEulerDegrees(rotationDegrees));
+                        gameWorld.debugUi.levelConfigDirty = true;
                     }
                 } else {
                     ApplyLevelRootTransform(gameWorld.level, position, QuaternionFromEulerDegrees(rotationDegrees));
-                    ConfigurePhysicsScene(gameWorld);
+                    ReloadJoltLevelPhysics(gameWorld);
                 }
             }
         }
@@ -1516,12 +1550,43 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
                 if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
                     ApplyCharacterRootTransform(gameWorld.interactions.characters[characterIndex], gameWorld.camera.position, gameWorld.interactions.characters[characterIndex].rootRotation);
+                    gameWorld.debugUi.levelConfigDirty = true;
                     SetVectorInput(gameWorld.debugUi.levelPositionInput, gameWorld.interactions.characters[characterIndex].rootPosition);
                 }
             } else {
                 ApplyLevelRootTransform(gameWorld.level, gameWorld.camera.position, gameWorld.level.rootRotation);
                 SetVectorInput(gameWorld.debugUi.levelPositionInput, gameWorld.level.rootPosition);
-                ConfigurePhysicsScene(gameWorld);
+                ReloadJoltLevelPhysics(gameWorld);
+            }
+        }
+        if (editingCharacter) {
+            editY += 34.0f;
+            if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, gameWorld.debugUi.levelConfigDirty ? "Save car_meet.json *" : "Save car_meet.json")) {
+                SaveCurrentLevelRuntimeConfig(gameWorld);
+            }
+            editY += 40.0f;
+            const char* detailTabs[] = {"VISUAL", "COL", "ICON", "SP/TR", "OTHER"};
+            for (int i = 0; i < 5; ++i) {
+                Rectangle tab = Rectangle{x + 12.0f + i * 66.0f, editY, 62.0f, 24.0f};
+                bool active = gameWorld.debugUi.inspectorDetailTab == i;
+                bool hovered = CheckCollisionPointRec(GetMousePosition(), tab);
+                DrawRectangleRec(tab, active ? Color{78, 92, 120, 255} : hovered ? Color{64, 64, 72, 255} : Color{42, 42, 48, 255});
+                DrawText(detailTabs[i], static_cast<int>(tab.x + 4.0f), static_cast<int>(tab.y + 6.0f), 12, RAYWHITE);
+                if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gameWorld.debugUi.inspectorDetailTab = i;
+            }
+            editY += 30.0f;
+            int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+            if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
+                const InteractableCharacter& character = gameWorld.interactions.characters[characterIndex];
+                if (gameWorld.debugUi.inspectorDetailTab == 0) {
+                    for (std::size_t i = 0; i < character.visualParts.size() && editY < h - 24.0f; ++i, editY += 20.0f) DrawText(character.visualParts[i].name.c_str(), static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
+                } else if (gameWorld.debugUi.inspectorDetailTab == 1) {
+                    for (std::size_t i = 0; i < character.colliders.size() && editY < h - 24.0f; ++i, editY += 20.0f) DrawText(character.colliders[i].name.c_str(), static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
+                } else if (gameWorld.debugUi.inspectorDetailTab == 2) {
+                    for (std::size_t i = 0; i < character.iconParts.size() && editY < h - 24.0f; ++i, editY += 20.0f) DrawText(character.iconParts[i].name.c_str(), static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
+                } else {
+                    DrawText("Sem dados nesta aba para CHAR.", static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, GRAY);
+                }
             }
         }
     }
@@ -1564,6 +1629,9 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 305, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 306, gameWorld.debugUi) || changed;
         editY += 34.0f;
+        if (DebugButton(Rectangle{x + 14.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 1 ? "Move ON" : "Move")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 1 ? 0 : 1;
+        if (DebugButton(Rectangle{x + 120.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 2 ? "Rotate ON" : "Rotate")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 2 ? 0 : 2;
+        editY += 34.0f;
 
         DrawText("Scale", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelScaleInput[0], 307, gameWorld.debugUi) || changed;
@@ -1575,80 +1643,9 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         if (node.kind != LevelDebugNodeKind::Visual && DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, "Teleport to Camera")) {
             TeleportLevelDebugNodeToCamera(gameWorld.level, gameWorld.debugUi.selectedLevelNode, gameWorld.camera);
             SetLevelNodeInputs(gameWorld.debugUi, gameWorld.level.debugNodes[gameWorld.debugUi.selectedLevelNode]);
-            ConfigurePhysicsScene(gameWorld);
+            ReloadJoltLevelPhysics(gameWorld);
         }
     }
-}
-
-void DrawLevelLoadSidebar(GameWorld& gameWorld) {
-    if (!gameWorld.debugUi.enabled || !gameWorld.debugUi.levelLoadOpen) return;
-
-    float width = 390.0f;
-    float x = static_cast<float>(GetScreenWidth()) - width;
-    float h = static_cast<float>(GetScreenHeight()) - 34.0f;
-    Rectangle panel = Rectangle{x, 34.0f, width, h};
-    DrawRectangleRec(panel, Color{24, 24, 30, 235});
-    DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
-    DrawText("Level Load", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
-
-    DrawText("Ordem da lista define level inicial no boot.", static_cast<int>(x + 14.0f), 72, 14, GRAY);
-
-    float listY = 100.0f;
-    float rowH = 46.0f;
-    int count = static_cast<int>(gameWorld.levelsConfig.levels.size());
-    if (count == 0) {
-        DrawText("No levels in levels.json", static_cast<int>(x + 14.0f), static_cast<int>(listY), 16, ORANGE);
-        return;
-    }
-
-    gameWorld.debugUi.selectedLevelConfigIndex = Clamp(gameWorld.debugUi.selectedLevelConfigIndex, 0, count - 1);
-    int visibleRows = std::min(count, std::max(1, static_cast<int>((h - 250.0f) / rowH)));
-    if (CheckCollisionPointRec(GetMousePosition(), Rectangle{x, listY, width, visibleRows * rowH})) {
-        gameWorld.debugUi.levelLoadScroll -= static_cast<int>(GetMouseWheelMove());
-    }
-    gameWorld.debugUi.levelLoadScroll = Clamp(gameWorld.debugUi.levelLoadScroll, 0, std::max(0, count - visibleRows));
-    for (int i = 0; i < visibleRows; ++i) {
-        int levelIndex = gameWorld.debugUi.levelLoadScroll + i;
-        const LevelConfigEntry& entry = gameWorld.levelsConfig.levels[static_cast<std::size_t>(levelIndex)];
-        Rectangle row = Rectangle{x + 12.0f, listY + i * rowH, width - 24.0f, rowH - 4.0f};
-        bool selected = gameWorld.debugUi.selectedLevelConfigIndex == levelIndex;
-        bool current = gameWorld.currentLevelConfigIndex == levelIndex;
-        bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
-        DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-        DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
-        DrawText(TextFormat("%d. %s%s", levelIndex + 1, GetLevelDisplayName(entry).c_str(), current ? "  [loaded]" : ""), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 6.0f), 16, RAYWHITE);
-        DrawText(entry.path.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 25.0f), 13, LIGHTGRAY);
-        if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            gameWorld.debugUi.selectedLevelConfigIndex = levelIndex;
-        }
-    }
-
-    if (count > visibleRows) {
-        DrawText(TextFormat("%d-%d / %d", gameWorld.debugUi.levelLoadScroll + 1, gameWorld.debugUi.levelLoadScroll + visibleRows, count), static_cast<int>(x + 14.0f), static_cast<int>(listY + visibleRows * rowH + 6.0f), 14, GRAY);
-    }
-
-    float actionY = listY + visibleRows * rowH + 34.0f;
-    int selectedIndex = gameWorld.debugUi.selectedLevelConfigIndex;
-    const LevelConfigEntry* selectedEntry = GetLevelConfigEntry(gameWorld.levelsConfig, selectedIndex);
-    if (selectedEntry != nullptr) {
-        DrawText(TextFormat("Selected: %s", GetLevelDisplayName(*selectedEntry).c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 16, YELLOW);
-        actionY += 24.0f;
-        DrawText(TextFormat("Config: %s", selectedEntry->configPath.empty() ? "(planned)" : selectedEntry->configPath.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
-        actionY += 34.0f;
-    }
-
-    if (DebugButton(Rectangle{x + 14.0f, actionY, 110.0f, 28.0f}, "Load")) {
-        LoadConfiguredLevel(gameWorld, selectedIndex);
-    }
-    if (DebugButton(Rectangle{x + 134.0f, actionY, 110.0f, 28.0f}, "Move Up")) {
-        MoveLevelConfigEntry(gameWorld, selectedIndex, selectedIndex - 1);
-    }
-    if (DebugButton(Rectangle{x + 254.0f, actionY, 110.0f, 28.0f}, "Move Down")) {
-        MoveLevelConfigEntry(gameWorld, selectedIndex, selectedIndex + 1);
-    }
-
-    actionY += 44.0f;
-    DrawText("Edit add/remove/path vem depois.", static_cast<int>(x + 14.0f), static_cast<int>(actionY), 14, GRAY);
 }
 
 bool BeginDebugPanel(
@@ -1799,91 +1796,14 @@ void DrawDebugPanels(GameWorld& gameWorld) {
     }
 }
 
-void DrawDebugMenuBar(GameWorld& gameWorld) {
-    if (!gameWorld.debugUi.enabled) {
-        return;
-    }
-
-    DrawRectangle(0, 0, GetScreenWidth(), 34, Color{28, 28, 32, 235});
-    DrawRectangleLines(0, 0, GetScreenWidth(), 34, Color{70, 70, 78, 255});
-
-    const char* items[] = {"Game", "Debug", "Person", "Physics"};
-    int menuX[4] = {};
-    int menuW[4] = {};
-    int x = 10;
-    Vector2 mouse = GetMousePosition();
-    for (int i = 0; i < 4; ++i) {
-        int width = MeasureText(items[i], 20) + 28;
-        menuX[i] = x;
-        menuW[i] = width;
-        Rectangle rect = Rectangle{static_cast<float>(x), 5.0f, static_cast<float>(width), 24.0f};
-        bool hovered = CheckCollisionPointRec(mouse, rect);
-        if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
-            gameWorld.debugUi.activeMenu = gameWorld.debugUi.activeMenu == i ? -1 : i;
-        }
-        DrawRectangleRec(rect, hovered || gameWorld.debugUi.activeMenu == i ? Color{62, 62, 70, 255} : Color{42, 42, 48, 255});
-        DrawText(items[i], x + 14, 8, 20, RAYWHITE);
-        x += width + 6;
-    }
-
-    if (gameWorld.debugUi.activeMenu == 0) {
-        float dx = static_cast<float>(menuX[0]);
-        if (DebugMenuItem(Rectangle{dx, 38, 190, 30}, "Restart Level")) {
-            RestartLevel(gameWorld);
-            gameWorld.debugUi.activeMenu = -1;
-        }
-        if (DebugMenuItem(Rectangle{dx, 68, 190, 30}, "Reset Person")) {
-            ResetGameWorld(gameWorld);
-            gameWorld.debugUi.activeMenu = -1;
-        }
-        if (DebugMenuItem(Rectangle{dx, 98, 190, 30}, "Teleport...")) {
-            gameWorld.debugUi.gameTeleportOpen = true;
-            SetVectorInput(gameWorld.debugUi.gameTeleportInput, gameWorld.person.position);
-            gameWorld.debugUi.activeMenu = -1;
-        }
-        if (DebugMenuItem(Rectangle{dx, 128, 190, 30}, "Load Level")) {
-            gameWorld.debugUi.levelLoadOpen = !gameWorld.debugUi.levelLoadOpen;
-            gameWorld.debugUi.levelSidebarOpen = false;
-            gameWorld.debugUi.activeMenu = -1;
-        }
-    } else if (gameWorld.debugUi.activeMenu == 1) {
-        float dx = static_cast<float>(menuX[1]);
-        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
-            gameWorld.debugUi.showForces = !gameWorld.debugUi.showForces;
-        }
-        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Person Status", true, gameWorld.debugUi.showVehicleStatus)) {
-            gameWorld.debugUi.showVehicleStatus = !gameWorld.debugUi.showVehicleStatus;
-        }
-        if (DebugMenuItem(Rectangle{dx, 98, 220, 30}, "Camera Teleport...")) {
-            gameWorld.debugUi.debugTeleportOpen = true;
-            SetVectorInput(gameWorld.debugUi.debugTeleportInput, gameWorld.camera.position);
-            gameWorld.debugUi.activeMenu = -1;
-        }
-        if (DebugMenuItem(Rectangle{dx, 128, 220, 30}, "Inspector", true, gameWorld.debugUi.levelSidebarOpen)) {
-            gameWorld.debugUi.levelSidebarOpen = !gameWorld.debugUi.levelSidebarOpen;
-            gameWorld.debugUi.levelLoadOpen = false;
-        }
-    } else if (gameWorld.debugUi.activeMenu == 2) {
-        float dx = static_cast<float>(menuX[2]);
-        DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Person Tuning", false);
-    } else if (gameWorld.debugUi.activeMenu == 3) {
-        float dx = static_cast<float>(menuX[3]);
-        if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Physics Panel", true, gameWorld.debugUi.showPhysicsPanel)) {
-            gameWorld.debugUi.showPhysicsPanel = !gameWorld.debugUi.showPhysicsPanel;
-        }
-    }
-
-    DrawText(TextFormat("Cam %.2f %.2f %.2f", gameWorld.camera.position.x, gameWorld.camera.position.y, gameWorld.camera.position.z), GetScreenWidth() - 610, 9, 16, LIGHTGRAY);
-    DrawText("F1 close menu | Hold RMB + WASD/Q/Z to fly", GetScreenWidth() - 420, 9, 16, LIGHTGRAY);
-}
-
 void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
+    DrawLevelSkybox(gameWorld.level, gameWorld.camera);
     DrawLevel(gameWorld.level);
     DrawInteractableCharacters(gameWorld.interactions);
     if (gameWorld.debugUi.showForces) {
         DrawLevelCollidersDebug(gameWorld.level);
-        DrawPersonDebugCapsule(gameWorld);
+        DrawPersonDebugCapsule(gameWorld.person, gameWorld.personConfig);
         Vector3 feetPosition = gameWorld.person.position;
         DrawSphere(feetPosition, 0.05f, gameWorld.person.grounded ? GREEN : RED);
     }
@@ -1919,12 +1839,18 @@ void DrawGameplay(GameWorld& gameWorld) {
         } else {
             DrawLevelDebugSelection(gameWorld.level, gameWorld.debugUi.selectedLevelNode, gameWorld.camera);
         }
+        DrawTransformGizmo(gameWorld);
     }
     EndMode3D();
-    DrawDebugMenuBar(gameWorld);
+    debug_ui::DrawTopBar(gameWorld, debug_ui::TopBarActions{RestartLevel, ResetGameWorld});
     DrawDebugPanels(gameWorld);
     DrawLevelSidebar(gameWorld);
-    DrawLevelLoadSidebar(gameWorld);
+    debug_ui::DrawLevelConfigSidebar(gameWorld, debug_ui::LevelConfigActions{
+        SaveCurrentLevelRuntimeConfig,
+        ReloadCurrentLevelForConfig,
+        LoadConfiguredLevel,
+        MoveLevelConfigEntry
+    });
     DrawInteractionUi(gameWorld.interactions);
     if (gameWorld.debugUi.enabled) {
         DrawDebugAxisGizmo(gameWorld.camera);
@@ -1968,7 +1894,7 @@ int main() {
         UpdateGameplay(gameWorld, GetFrameTime());
 
         BeginDrawing();
-        ClearBackground(RAYWHITE);
+        ClearBackground(BLACK);
         DrawGameplay(gameWorld);
         EndDrawing();
     }

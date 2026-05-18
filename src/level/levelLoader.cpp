@@ -185,6 +185,23 @@ bool StartsWith(const std::string& text, const char* prefix) {
     return text.size() >= p.size() && text.compare(0, p.size(), p) == 0;
 }
 
+std::string ToUpper(std::string text) {
+    for (std::size_t i = 0; i < text.size(); ++i) {
+        text[i] = static_cast<char>(std::toupper(static_cast<unsigned char>(text[i])));
+    }
+    return text;
+}
+
+bool IsBoxColliderName(const std::string& name) {
+    std::string upper = ToUpper(name);
+    return StartsWith(upper, "COL_BOX_") || StartsWith(upper, "COL_WALL_") || StartsWith(upper, "COL_OBSTACLE_");
+}
+
+bool IsMeshColliderName(const std::string& name) {
+    std::string upper = ToUpper(name);
+    return StartsWith(upper, "COL_MESH_") || StartsWith(upper, "COL_ROAD_") || StartsWith(upper, "COL_RAMP_") || StartsWith(upper, "COL_SURFACE_");
+}
+
 LevelDebugNodeKind KindFromNodeName(const std::string& name) {
     if (StartsWith(name, "VISUAL_")) return LevelDebugNodeKind::Visual;
     if (StartsWith(name, "COL_")) return LevelDebugNodeKind::Collider;
@@ -540,34 +557,43 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         }
 
         if (StartsWith(node.name, "COL_")) {
-            LevelCollisionMesh collisionMesh;
-            collisionMesh.name = node.name;
-            collisionMesh.position = volumePosition;
-            collisionMesh.rotation = worldRotation;
-            collisionMesh.size = size;
-            collisionMesh.indices = geometry.indices;
-            collisionMesh.vertices.reserve(geometry.vertices.size());
-            for (std::size_t vertex = 0; vertex < geometry.vertices.size(); ++vertex) {
-                Vector3 scaledVertex = Vector3{
-                    geometry.vertices[vertex].x * worldScale.x,
-                    geometry.vertices[vertex].y * worldScale.y,
-                    geometry.vertices[vertex].z * worldScale.z
-                };
-                collisionMesh.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
+            if (IsMeshColliderName(node.name)) {
+                LevelCollisionMesh collisionMesh;
+                collisionMesh.name = node.name;
+                collisionMesh.position = volumePosition;
+                collisionMesh.rotation = worldRotation;
+                collisionMesh.size = size;
+                collisionMesh.indices = geometry.indices;
+                collisionMesh.vertices.reserve(geometry.vertices.size());
+                for (std::size_t vertex = 0; vertex < geometry.vertices.size(); ++vertex) {
+                    Vector3 scaledVertex = Vector3{
+                        geometry.vertices[vertex].x * worldScale.x,
+                        geometry.vertices[vertex].y * worldScale.y,
+                        geometry.vertices[vertex].z * worldScale.z
+                    };
+                    collisionMesh.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
+                }
+                level.collisionMeshes.push_back(collisionMesh);
+                debugNode.runtimeIndex = static_cast<int>(level.collisionMeshes.size() - 1);
+                TraceLog(LOG_INFO, "Level mesh collider: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f) vertices=%zu triangles=%zu",
+                    collisionMesh.name.c_str(), collisionMesh.position.x, collisionMesh.position.y, collisionMesh.position.z,
+                    collisionMesh.size.x, collisionMesh.size.y, collisionMesh.size.z,
+                    collisionMesh.vertices.size(), collisionMesh.indices.size() / 3);
+            } else {
+                if (!IsBoxColliderName(node.name)) {
+                    TraceLog(LOG_WARNING, "Level collider %s has generic COL_ prefix; treating as box. Prefer COL_BOX_, COL_WALL_, COL_OBSTACLE_, COL_MESH_, COL_ROAD_, COL_RAMP_, or COL_SURFACE_", node.name.c_str());
+                }
+                LevelBoxVolume collider;
+                collider.name = node.name;
+                collider.position = volumePosition;
+                collider.rotation = worldRotation;
+                collider.size = size;
+                level.colliders.push_back(collider);
+                debugNode.runtimeIndex = static_cast<int>(level.colliders.size() - 1);
+                TraceLog(LOG_INFO, "Level box collider: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f)",
+                    collider.name.c_str(), collider.position.x, collider.position.y, collider.position.z,
+                    collider.size.x, collider.size.y, collider.size.z);
             }
-            level.collisionMeshes.push_back(collisionMesh);
-            debugNode.runtimeIndex = static_cast<int>(level.collisionMeshes.size() - 1);
-            TraceLog(LOG_INFO, "Level collision mesh: %s pos=(%.2f %.2f %.2f) size=(%.2f %.2f %.2f) vertices=%zu triangles=%zu",
-                collisionMesh.name.c_str(), collisionMesh.position.x, collisionMesh.position.y, collisionMesh.position.z,
-                collisionMesh.size.x, collisionMesh.size.y, collisionMesh.size.z,
-                collisionMesh.vertices.size(), collisionMesh.indices.size() / 3);
-
-            LevelBoxVolume collider;
-            collider.name = node.name;
-            collider.position = volumePosition;
-            collider.rotation = worldRotation;
-            collider.size = size;
-            level.colliders.push_back(collider);
             level.debugNodes.push_back(debugNode);
         } else if (node.name == "SPAWN_PLAYER") {
             level.playerSpawn.position = worldPosition;
@@ -575,6 +601,15 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
             level.playerSpawn.valid = true;
             level.debugNodes.push_back(debugNode);
             TraceLog(LOG_INFO, "Level spawn: %s pos=(%.2f %.2f %.2f)", node.name.c_str(), worldPosition.x, worldPosition.y, worldPosition.z);
+        } else if (StartsWith(node.name, "TRIGGER_")) {
+            LevelBoxVolume trigger;
+            trigger.name = node.name;
+            trigger.position = worldPosition;
+            trigger.rotation = worldRotation;
+            trigger.size = size;
+            level.triggers.push_back(trigger);
+            debugNode.runtimeIndex = static_cast<int>(level.triggers.size() - 1);
+            level.debugNodes.push_back(debugNode);
         } else if (StartsWith(node.name, "CHECKPOINT_")) {
             LevelCheckpoint checkpoint;
             checkpoint.name = node.name;
@@ -605,16 +640,55 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
     level.originalColliders = level.colliders;
     level.originalCollisionMeshes = level.collisionMeshes;
     level.originalCheckpoints = level.checkpoints;
+    level.originalTriggers = level.triggers;
     level.originalPlayerSpawn = level.playerSpawn;
     level.originalFinishLine = level.finishLine;
 }
 
+void LoadLevelSkybox(LevelData& level, const std::string& skyboxPath) {
+    if (skyboxPath.empty()) return;
+
+    level.skybox.path = Utils::ResolveProjectPath(skyboxPath);
+    Image image = LoadImage(level.skybox.path.c_str());
+    if (image.data == nullptr) {
+        TraceLog(LOG_WARNING, "Level skybox: failed to load image: %s", level.skybox.path.c_str());
+        return;
+    }
+
+    level.skybox.texture = LoadTextureCubemap(image, CUBEMAP_LAYOUT_CROSS_FOUR_BY_THREE);
+    UnloadImage(image);
+    if (level.skybox.texture.id == 0) {
+        TraceLog(LOG_WARNING, "Level skybox: failed to create cubemap: %s", level.skybox.path.c_str());
+        return;
+    }
+
+    level.skybox.model = LoadModelFromMesh(GenMeshCube(1.0f, 1.0f, 1.0f));
+    level.skybox.shader = LoadShader(
+        Utils::ResolveProjectPath("resources/assets/shaders/skybox.vs").c_str(),
+        Utils::ResolveProjectPath("resources/assets/shaders/skybox.fs").c_str());
+    if (level.skybox.shader.id == 0 || level.skybox.model.materialCount <= 0) {
+        TraceLog(LOG_WARNING, "Level skybox: failed to load shader");
+        UnloadTexture(level.skybox.texture);
+        UnloadModel(level.skybox.model);
+        level.skybox = LevelSkybox();
+        return;
+    }
+
+    int environmentMap = MATERIAL_MAP_CUBEMAP;
+    SetShaderValue(level.skybox.shader, GetShaderLocation(level.skybox.shader, "environmentMap"), &environmentMap, SHADER_UNIFORM_INT);
+    level.skybox.model.materials[0].shader = level.skybox.shader;
+    level.skybox.model.materials[0].maps[MATERIAL_MAP_CUBEMAP].texture = level.skybox.texture;
+    level.skybox.loaded = true;
+    TraceLog(LOG_INFO, "Level skybox: loaded %s", level.skybox.path.c_str());
+}
+
 }  // namespace
 
-LevelData LoadLevel(const std::string& levelPath) {
+LevelData LoadLevel(const std::string& levelPath, const std::string& skyboxPath) {
     LevelData level;
     level.path = Utils::ResolveProjectPath(levelPath);
     level.name = levelPath;
+    LoadLevelSkybox(level, skyboxPath);
     level.visualModel = LoadModel(level.path.c_str());
     level.visualLoaded = level.visualModel.meshCount > 0;
     if (!level.visualLoaded) {
@@ -625,10 +699,26 @@ LevelData LoadLevel(const std::string& levelPath) {
 }
 
 void UnloadLevel(LevelData& level) {
+    if (level.skybox.loaded) {
+        UnloadModel(level.skybox.model);
+        UnloadTexture(level.skybox.texture);
+        UnloadShader(level.skybox.shader);
+        level.skybox = LevelSkybox();
+    }
     if (level.visualLoaded) {
         UnloadModel(level.visualModel);
         level.visualLoaded = false;
     }
+}
+
+void DrawLevelSkybox(const LevelData& level, const Camera& camera) {
+    if (!level.skybox.loaded) return;
+
+    rlDisableBackfaceCulling();
+    rlDisableDepthMask();
+    DrawModel(level.skybox.model, camera.position, 500.0f, WHITE);
+    rlEnableDepthMask();
+    rlEnableBackfaceCulling();
 }
 
 void DrawLevel(const LevelData& level) {
@@ -706,6 +796,12 @@ void ApplyLevelRootTransform(LevelData& level, Vector3 position, Quaternion rota
         level.checkpoints[i].rotation = ApplyRootRotation(level, level.originalCheckpoints[i].rotation);
     }
 
+    level.triggers = level.originalTriggers;
+    for (std::size_t i = 0; i < level.triggers.size(); ++i) {
+        level.triggers[i].position = ApplyRootPoint(level, level.originalTriggers[i].position);
+        level.triggers[i].rotation = ApplyRootRotation(level, level.originalTriggers[i].rotation);
+    }
+
     level.playerSpawn = level.originalPlayerSpawn;
     if (level.playerSpawn.valid) {
         level.playerSpawn.position = ApplyRootPoint(level, level.originalPlayerSpawn.position);
@@ -755,7 +851,7 @@ void ApplyLevelDebugNodeTransform(LevelData& level, int debugNodeIndex, Vector3 
         if (n.kind == LevelDebugNodeKind::Visual && n.runtimeIndex >= 0 && n.runtimeIndex < static_cast<int>(level.renderParts.size())) {
             level.renderParts[n.runtimeIndex].transform = ComposeTransform(n.position, n.rotation, n.scale);
         } else if (n.kind == LevelDebugNodeKind::Collider && n.runtimeIndex >= 0) {
-            if (n.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
+            if (IsMeshColliderName(n.name) && n.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
                 Vector3 meshDelta = Vector3Subtract(n.position, level.collisionMeshes[n.runtimeIndex].position);
                 for (std::size_t v = 0; v < level.collisionMeshes[n.runtimeIndex].vertices.size(); ++v) {
                     level.collisionMeshes[n.runtimeIndex].vertices[v] = Vector3Add(level.collisionMeshes[n.runtimeIndex].vertices[v], meshDelta);
@@ -763,8 +859,7 @@ void ApplyLevelDebugNodeTransform(LevelData& level, int debugNodeIndex, Vector3 
                 level.collisionMeshes[n.runtimeIndex].position = n.position;
                 level.collisionMeshes[n.runtimeIndex].rotation = n.rotation;
                 level.collisionMeshes[n.runtimeIndex].size = n.size;
-            }
-            if (n.runtimeIndex < static_cast<int>(level.colliders.size())) {
+            } else if (n.runtimeIndex < static_cast<int>(level.colliders.size())) {
                 level.colliders[n.runtimeIndex].position = n.position;
                 level.colliders[n.runtimeIndex].rotation = n.rotation;
                 level.colliders[n.runtimeIndex].size = n.size;
@@ -772,10 +867,14 @@ void ApplyLevelDebugNodeTransform(LevelData& level, int debugNodeIndex, Vector3 
         } else if (n.kind == LevelDebugNodeKind::Spawn && n.name == "SPAWN_PLAYER") {
             level.playerSpawn.position = n.position;
             level.playerSpawn.rotation = n.rotation;
-        } else if (n.kind == LevelDebugNodeKind::Trigger && n.runtimeIndex >= 0 && n.runtimeIndex < static_cast<int>(level.checkpoints.size())) {
+        } else if (n.kind == LevelDebugNodeKind::Trigger && n.runtimeIndex >= 0 && StartsWith(n.name, "CHECKPOINT_") && n.runtimeIndex < static_cast<int>(level.checkpoints.size())) {
             level.checkpoints[n.runtimeIndex].position = n.position;
             level.checkpoints[n.runtimeIndex].rotation = n.rotation;
             level.checkpoints[n.runtimeIndex].size = n.size;
+        } else if (n.kind == LevelDebugNodeKind::Trigger && n.runtimeIndex >= 0 && StartsWith(n.name, "TRIGGER_") && n.runtimeIndex < static_cast<int>(level.triggers.size())) {
+            level.triggers[n.runtimeIndex].position = n.position;
+            level.triggers[n.runtimeIndex].rotation = n.rotation;
+            level.triggers[n.runtimeIndex].size = n.size;
         } else if (n.name == "FINISH_LINE") {
             level.finishLine.position = n.position;
             level.finishLine.rotation = n.rotation;
@@ -790,6 +889,27 @@ void TeleportLevelDebugNodeToCamera(LevelData& level, int debugNodeIndex, const 
     ApplyLevelDebugNodeTransform(level, debugNodeIndex, camera.position, node.rotation, node.scale);
 }
 
+void DrawLevelBoxWire(const LevelBoxVolume& box, Color color) {
+    Vector3 half = Vector3Scale(box.size, 0.5f);
+    Vector3 corners[8];
+    int index = 0;
+    for (int x = -1; x <= 1; x += 2) {
+        for (int y = -1; y <= 1; y += 2) {
+            for (int z = -1; z <= 1; z += 2) {
+                Vector3 local = Vector3{half.x * static_cast<float>(x), half.y * static_cast<float>(y), half.z * static_cast<float>(z)};
+                corners[index++] = Vector3Add(box.position, Vector3RotateByQuaternion(local, box.rotation));
+            }
+        }
+    }
+    const int edges[12][2] = {
+        {0, 1}, {0, 2}, {0, 4}, {3, 1}, {3, 2}, {3, 7},
+        {5, 1}, {5, 4}, {5, 7}, {6, 2}, {6, 4}, {6, 7}
+    };
+    for (int i = 0; i < 12; ++i) {
+        DrawLine3D(corners[edges[i][0]], corners[edges[i][1]], color);
+    }
+}
+
 void DrawLevelDebugSelection(const LevelData& level, int debugNodeIndex, const Camera& camera) {
     if (debugNodeIndex < 0 || debugNodeIndex >= static_cast<int>(level.debugNodes.size())) return;
     const LevelDebugNode& node = level.debugNodes[debugNodeIndex];
@@ -797,17 +917,21 @@ void DrawLevelDebugSelection(const LevelData& level, int debugNodeIndex, const C
     DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 1.0f, 0.0f}), GREEN);
     DrawLine3D(node.position, Vector3Add(node.position, Vector3{0.0f, 0.0f, 1.0f}), BLUE);
 
-    if (node.kind == LevelDebugNodeKind::Collider && node.runtimeIndex >= 0 && node.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
-        const LevelCollisionMesh& mesh = level.collisionMeshes[node.runtimeIndex];
-        for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
-            unsigned int ia = mesh.indices[t];
-            unsigned int ib = mesh.indices[t + 1];
-            unsigned int ic = mesh.indices[t + 2];
-            if (ia < mesh.vertices.size() && ib < mesh.vertices.size() && ic < mesh.vertices.size()) {
-                DrawLine3D(mesh.vertices[ia], mesh.vertices[ib], GREEN);
-                DrawLine3D(mesh.vertices[ib], mesh.vertices[ic], GREEN);
-                DrawLine3D(mesh.vertices[ic], mesh.vertices[ia], GREEN);
+    if (node.kind == LevelDebugNodeKind::Collider && node.runtimeIndex >= 0) {
+        if (IsMeshColliderName(node.name) && node.runtimeIndex < static_cast<int>(level.collisionMeshes.size())) {
+            const LevelCollisionMesh& mesh = level.collisionMeshes[node.runtimeIndex];
+            for (std::size_t t = 0; t + 2 < mesh.indices.size(); t += 3) {
+                unsigned int ia = mesh.indices[t];
+                unsigned int ib = mesh.indices[t + 1];
+                unsigned int ic = mesh.indices[t + 2];
+                if (ia < mesh.vertices.size() && ib < mesh.vertices.size() && ic < mesh.vertices.size()) {
+                    DrawLine3D(mesh.vertices[ia], mesh.vertices[ib], GREEN);
+                    DrawLine3D(mesh.vertices[ib], mesh.vertices[ic], GREEN);
+                    DrawLine3D(mesh.vertices[ic], mesh.vertices[ia], GREEN);
+                }
             }
+        } else if (node.runtimeIndex < static_cast<int>(level.colliders.size())) {
+            DrawLevelBoxWire(level.colliders[node.runtimeIndex], GREEN);
         }
     }
 

@@ -1,6 +1,8 @@
 #ifndef PHYSICS_SHAPES_BOX_SHAPE_HPP
 #define PHYSICS_SHAPES_BOX_SHAPE_HPP
 
+#include "raymath.h"
+
 #include "../shape.hpp"
 
 namespace physics {

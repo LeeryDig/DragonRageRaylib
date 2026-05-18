@@ -1,0 +1,10 @@
+{
+  "skybox": "resources/assets/skybox/Cubemap_Sky_12-512x512.png",
+  "characters": [
+    {
+      "config": "resources/character/chartest.json",
+      "position": [3.721, 0.000, 0.000],
+      "rotation": [0.000, 0.000, 0.000]
+    }
+  ]
+}

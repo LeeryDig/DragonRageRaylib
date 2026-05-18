@@ -41,6 +41,12 @@ struct InteractableCharacter {
     std::vector<CharacterCapsule> originalColliders;
 };
 
+struct CharacterSpawnConfig {
+    std::string configPath;
+    Vector3 position;
+    Vector3 rotationDegrees;
+};
+
 struct InteractionSystem {
     std::vector<InteractableCharacter> characters;
     int focusedIndex;
@@ -49,6 +55,7 @@ struct InteractionSystem {
     bool dialogueOpen;
 };
 
+InteractionSystem LoadInteractionSystem(const std::vector<CharacterSpawnConfig>& characters);
 InteractionSystem LoadInteractionSystem(const std::string& configPath);
 void UnloadInteractionSystem(InteractionSystem& system);
 

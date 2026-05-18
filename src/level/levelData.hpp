@@ -76,11 +76,26 @@ struct LevelSpawn {
           valid(false) {}
 };
 
+struct LevelSkybox {
+    std::string path;
+    Model model;
+    TextureCubemap texture;
+    Shader shader;
+    bool loaded;
+
+    LevelSkybox()
+        : model(),
+          texture(),
+          shader(),
+          loaded(false) {}
+};
+
 struct LevelData {
     std::string name;
     std::string path;
     Model visualModel;
     bool visualLoaded;
+    LevelSkybox skybox;
     Vector3 rootPosition;
     Quaternion rootRotation;
     std::vector<LevelRenderPart> renderParts;
@@ -90,11 +105,13 @@ struct LevelData {
     std::vector<LevelBoxVolume> originalColliders;
     std::vector<LevelCollisionMesh> originalCollisionMeshes;
     std::vector<LevelCheckpoint> originalCheckpoints;
+    std::vector<LevelBoxVolume> originalTriggers;
     LevelSpawn originalPlayerSpawn;
     LevelBoxVolume originalFinishLine;
     std::vector<LevelBoxVolume> colliders;
     std::vector<LevelCollisionMesh> collisionMeshes;
     std::vector<LevelCheckpoint> checkpoints;
+    std::vector<LevelBoxVolume> triggers;
     LevelSpawn playerSpawn;
     LevelBoxVolume finishLine;
     bool hasFinishLine;
@@ -102,6 +119,7 @@ struct LevelData {
     LevelData()
         : visualModel(),
           visualLoaded(false),
+          skybox(),
           rootPosition{0.0f, 0.0f, 0.0f},
           rootRotation{0.0f, 0.0f, 0.0f, 1.0f},
           originalFinishLine(),

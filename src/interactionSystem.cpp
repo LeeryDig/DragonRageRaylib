@@ -448,28 +448,33 @@ void WrapAndDrawText(const std::string& text, int x, int y, int fontSize, int ma
     if (!line.empty()) DrawText(line.c_str(), x, lineY, fontSize, color);
 }
 
-}  // namespace
-
-InteractionSystem LoadInteractionSystem(const std::string& configPath) {
+InteractionSystem CreateEmptyInteractionSystem() {
     InteractionSystem system = {};
     system.focusedIndex = -1;
     system.activeDialogueIndex = -1;
     system.selectedChoiceIndex = 0;
     system.dialogueOpen = false;
+    return system;
+}
 
-    char* raw = LoadFileText(configPath.c_str());
-    if (raw == nullptr) return system;
+bool LoadInteractableCharacter(const std::string& configPath, InteractableCharacter& character) {
+    char* raw = LoadFileText(Utils::ResolveProjectPath(configPath).c_str());
+    if (raw == nullptr) {
+        TraceLog(LOG_WARNING, "Character config: failed to load %s", configPath.c_str());
+        return false;
+    }
+
     std::string json = raw;
     UnloadFileText(raw);
 
     std::string characterBlock = ExtractObjectBlock(json, "character");
-    if (characterBlock.empty()) return system;
+    if (characterBlock.empty()) return false;
 
-    InteractableCharacter character = {};
-    character.id = ExtractString(characterBlock, "id", "chartest");
+    character = {};
+    character.id = ExtractString(characterBlock, "id", "character");
     character.displayName = ExtractString(characterBlock, "display_name", "Personagem");
     character.dialogueText = ExtractString(characterBlock, "dialogue_text", "Texto placeholder.");
-    character.modelPath = ExtractString(characterBlock, "model_path", "resources/character/chartest.glb");
+    character.modelPath = Utils::ResolveProjectPath(ExtractString(characterBlock, "model_path", ""));
     character.choices = ExtractChoices(characterBlock);
     character.hasModel = false;
     if (!character.modelPath.empty() && FileExists(character.modelPath.c_str())) {
@@ -477,24 +482,56 @@ InteractionSystem LoadInteractionSystem(const std::string& configPath) {
         character.hasModel = character.model.meshCount > 0;
     }
 
-    if (character.hasModel) {
-        character.rootPosition = Vector3Zero();
-        character.rootRotation = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
-        ParseCharacterModelMetadata(character);
-        character.originalVisualParts = character.visualParts;
-        character.originalIconParts = character.iconParts;
-        character.originalColliders = character.colliders;
-        if (!character.visualParts.empty() && !character.colliders.empty()) {
-            system.characters.push_back(character);
-        } else {
-            TraceLog(LOG_WARNING,
-                "Character '%s' skipped: GLB must contain at least one VISUAL_* mesh and one COL_* capsule mesh: %s",
-                character.id.c_str(),
-                character.modelPath.c_str());
-            UnloadModel(character.model);
-        }
+    if (!character.hasModel) return false;
+
+    character.rootPosition = Vector3Zero();
+    character.rootRotation = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+    ParseCharacterModelMetadata(character);
+    character.originalVisualParts = character.visualParts;
+    character.originalIconParts = character.iconParts;
+    character.originalColliders = character.colliders;
+    if (!character.visualParts.empty() && !character.colliders.empty()) return true;
+
+    TraceLog(LOG_WARNING,
+        "Character '%s' skipped: GLB must contain at least one VISUAL_* mesh and one COL_* capsule mesh: %s",
+        character.id.c_str(),
+        character.modelPath.c_str());
+    UnloadModel(character.model);
+    character = {};
+    return false;
+}
+
+}  // namespace
+
+InteractionSystem LoadInteractionSystem(const std::vector<CharacterSpawnConfig>& characters) {
+    InteractionSystem system = CreateEmptyInteractionSystem();
+    for (std::size_t i = 0; i < characters.size(); ++i) {
+        InteractableCharacter character;
+        if (!LoadInteractableCharacter(characters[i].configPath, character)) continue;
+
+        Quaternion rotation = QuaternionFromEuler(
+            characters[i].rotationDegrees.x * DEG2RAD,
+            characters[i].rotationDegrees.y * DEG2RAD,
+            characters[i].rotationDegrees.z * DEG2RAD);
+        ApplyCharacterRootTransform(character, characters[i].position, rotation);
+        TraceLog(LOG_INFO,
+            "Character: loaded %s from %s at %.2f %.2f %.2f",
+            character.id.c_str(),
+            characters[i].configPath.c_str(),
+            characters[i].position.x,
+            characters[i].position.y,
+            characters[i].position.z);
+        system.characters.push_back(character);
     }
     return system;
+}
+
+InteractionSystem LoadInteractionSystem(const std::string& configPath) {
+    CharacterSpawnConfig character;
+    character.configPath = configPath;
+    character.position = Vector3{0.0f, 0.0f, 0.0f};
+    character.rotationDegrees = Vector3{0.0f, 0.0f, 0.0f};
+    return LoadInteractionSystem(std::vector<CharacterSpawnConfig>(1, character));
 }
 
 void UnloadInteractionSystem(InteractionSystem& system) {

@@ -5,6 +5,7 @@
 #include "raymath.h"
 
 #include "shapes/boxShape.hpp"
+#include "shapes/meshShape.hpp"
 
 namespace physics {
 
@@ -21,6 +22,10 @@ struct OrientedWorldBox {
 
 bool IsBoxShape(const Collider& collider) {
     return collider.GetShape() && collider.GetShape()->GetType() == ShapeType::Box;
+}
+
+bool IsMeshShape(const Collider& collider) {
+    return collider.GetShape() && collider.GetShape()->GetType() == ShapeType::Mesh;
 }
 
 OrientedWorldBox BuildWorldBox(const Transform3D& ownerTransform, const Collider& collider) {
@@ -127,7 +132,131 @@ bool ComputeBoxBoxOverlapInternal(
     return true;
 }
 
+bool PointInTriangle(const Vector3& point, const Vector3& a, const Vector3& b, const Vector3& c) {
+    Vector3 v0 = Vector3Subtract(c, a);
+    Vector3 v1 = Vector3Subtract(b, a);
+    Vector3 v2 = Vector3Subtract(point, a);
+    float dot00 = Vector3DotProduct(v0, v0);
+    float dot01 = Vector3DotProduct(v0, v1);
+    float dot02 = Vector3DotProduct(v0, v2);
+    float dot11 = Vector3DotProduct(v1, v1);
+    float dot12 = Vector3DotProduct(v1, v2);
+    float denom = dot00 * dot11 - dot01 * dot01;
+    if (fabsf(denom) <= 0.000001f) return false;
+    float invDenom = 1.0f / denom;
+    float u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+    float v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+    return u >= -0.001f && v >= -0.001f && (u + v) <= 1.001f;
+}
+
+std::vector<Vector3> GetWorldBoxCorners(const OrientedWorldBox& box) {
+    std::vector<Vector3> corners;
+    corners.reserve(8);
+    float halfExtents[3] = {box.halfExtents.x, box.halfExtents.y, box.halfExtents.z};
+    for (int x = -1; x <= 1; x += 2) {
+        for (int y = -1; y <= 1; y += 2) {
+            for (int z = -1; z <= 1; z += 2) {
+                Vector3 corner = box.center;
+                corner = Vector3Add(corner, Vector3Scale(box.axes[0], halfExtents[0] * static_cast<float>(x)));
+                corner = Vector3Add(corner, Vector3Scale(box.axes[1], halfExtents[1] * static_cast<float>(y)));
+                corner = Vector3Add(corner, Vector3Scale(box.axes[2], halfExtents[2] * static_cast<float>(z)));
+                corners.push_back(corner);
+            }
+        }
+    }
+    return corners;
+}
+
+bool ComputeBoxMeshOverlapInternal(
+    const OrientedWorldBox& box,
+    const Vector3& boxVelocity,
+    const MeshShape& meshShape,
+    bool boxIsBodyA,
+    OverlapResult& result) {
+    const std::vector<Vector3>& vertices = meshShape.GetVertices();
+    const std::vector<unsigned int>& indices = meshShape.GetIndices();
+    if (vertices.empty() || indices.size() < 3) return false;
+
+    std::vector<Vector3> corners = GetWorldBoxCorners(box);
+    bool found = false;
+    float bestPenetration = 0.0f;
+    ContactPoint bestPoint = {};
+
+    for (std::size_t t = 0; t + 2 < indices.size(); t += 3) {
+        unsigned int ia = indices[t];
+        unsigned int ib = indices[t + 1];
+        unsigned int ic = indices[t + 2];
+        if (ia >= vertices.size() || ib >= vertices.size() || ic >= vertices.size()) continue;
+
+        Vector3 a = vertices[ia];
+        Vector3 b = vertices[ib];
+        Vector3 c = vertices[ic];
+        Vector3 normal = Vector3CrossProduct(Vector3Subtract(b, a), Vector3Subtract(c, a));
+        float normalLength = Vector3Length(normal);
+        if (normalLength <= 0.000001f) continue;
+        normal = Vector3Scale(normal, 1.0f / normalLength);
+
+        Vector3 triCenter = Vector3Scale(Vector3Add(Vector3Add(a, b), c), 1.0f / 3.0f);
+        if (Vector3DotProduct(Vector3Subtract(box.center, triCenter), normal) < 0.0f) {
+            normal = Vector3Negate(normal);
+        }
+
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            float distance = Vector3DotProduct(Vector3Subtract(corners[i], a), normal);
+            if (distance > kContactEpsilon) continue;
+            Vector3 projected = Vector3Subtract(corners[i], Vector3Scale(normal, distance));
+            if (!PointInTriangle(projected, a, b, c)) continue;
+
+            float penetration = -distance;
+            if (!found || penetration > bestPenetration) {
+                found = true;
+                bestPenetration = penetration;
+                bestPoint.penetrationDepth = penetration;
+                bestPoint.position = projected;
+                bestPoint.normal = boxIsBodyA ? Vector3Negate(normal) : normal;
+                bestPoint.relativeVelocity = boxIsBodyA ? boxVelocity : Vector3Negate(boxVelocity);
+            }
+        }
+    }
+
+    if (!found) return false;
+    result.point = bestPoint;
+    return true;
+}
+
 }  // namespace
+
+bool ComputeBodyOverlap(
+    const PhysicsBody& bodyA,
+    const Collider& colliderA,
+    const PhysicsBody& bodyB,
+    const Collider& colliderB,
+    OverlapResult& result) {
+    if (IsBoxShape(colliderA) && IsBoxShape(colliderB)) {
+        OrientedWorldBox boxA = BuildWorldBox(bodyA.GetTransform(), colliderA);
+        OrientedWorldBox boxB = BuildWorldBox(bodyB.GetTransform(), colliderB);
+        return ComputeBoxBoxOverlapInternal(
+            boxA,
+            bodyA.GetLinearVelocity(),
+            boxB,
+            bodyB.GetLinearVelocity(),
+            result);
+    }
+
+    if (IsBoxShape(colliderA) && IsMeshShape(colliderB)) {
+        OrientedWorldBox boxA = BuildWorldBox(bodyA.GetTransform(), colliderA);
+        const MeshShape* meshShape = static_cast<const MeshShape*>(colliderB.GetShape().get());
+        return ComputeBoxMeshOverlapInternal(boxA, bodyA.GetLinearVelocity(), *meshShape, true, result);
+    }
+
+    if (IsMeshShape(colliderA) && IsBoxShape(colliderB)) {
+        OrientedWorldBox boxB = BuildWorldBox(bodyB.GetTransform(), colliderB);
+        const MeshShape* meshShape = static_cast<const MeshShape*>(colliderA.GetShape().get());
+        return ComputeBoxMeshOverlapInternal(boxB, bodyB.GetLinearVelocity(), *meshShape, false, result);
+    }
+
+    return false;
+}
 
 bool ComputeBodyBoxOverlap(
     const PhysicsBody& bodyA,
@@ -135,18 +264,7 @@ bool ComputeBodyBoxOverlap(
     const PhysicsBody& bodyB,
     const Collider& colliderB,
     OverlapResult& result) {
-    if (!IsBoxShape(colliderA) || !IsBoxShape(colliderB)) {
-        return false;
-    }
-
-    OrientedWorldBox boxA = BuildWorldBox(bodyA.GetTransform(), colliderA);
-    OrientedWorldBox boxB = BuildWorldBox(bodyB.GetTransform(), colliderB);
-    return ComputeBoxBoxOverlapInternal(
-        boxA,
-        bodyA.GetLinearVelocity(),
-        boxB,
-        bodyB.GetLinearVelocity(),
-        result);
+    return ComputeBodyOverlap(bodyA, colliderA, bodyB, colliderB, result);
 }
 
 bool ComputeTriggerBodyBoxOverlap(

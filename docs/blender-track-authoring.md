@@ -4,6 +4,8 @@ Este documento define o padrão de criação de pistas/fases no Blender para o D
 
 A ideia principal é: **o Blender é a fonte única da fase**. A parte visual, colliders, spawn, checkpoints e finish line devem estar dentro do arquivo `.glb` exportado.
 
+A física de personagem/cenário usa **Jolt Physics**: cenário estático vira static body, player usa capsule character controller.
+
 ## Estrutura recomendada da fase
 
 Cada fase deve ficar em uma pasta própria:
@@ -62,37 +64,43 @@ Todos os colliders devem ficar na coleção `COLLIDERS` e começar com o prefixo
 Exemplos:
 
 ```txt
-COL_ROAD_001
-COL_ROAD_002
-COL_WALL_LEFT_001
+COL_BOX_WALL_LEFT_001
+COL_BOX_BUILDING_BLOCKER_001
 COL_WALL_RIGHT_001
+COL_OBSTACLE_CRATE_001
+COL_ROAD_001
 COL_RAMP_001
-COL_OBSTACLE_001
+COL_SURFACE_DIRT_001
+COL_MESH_ROCK_001
 ```
 
-### Regra inicial
+### Regra atual
 
-No MVP, existem dois tipos principais:
+Existem dois tipos físicos principais:
 
-- `COL_Road_*` e `COL_Ramp_*`: devem ser **planos/retângulos** que formam a superfície dirigível da pista.
-- Outros `COL_*`, como `COL_Wall_*` e `COL_Obstacle_*`: são interpretados como **box colliders/paralelepípedos**.
+- `COL_BOX_*`, `COL_WALL_*`, `COL_OBSTACLE_*`: **box colliders/paralelepípedos orientados**.
+- `COL_ROAD_*`, `COL_RAMP_*`, `COL_SURFACE_*`, `COL_MESH_*`: **mesh colliders estáticos por triângulos**.
 
-Para roads/ramps, o jogo usa o plano exatamente onde ele foi posicionado/rotacionado no Blender. O tamanho do plano define a área válida de contato da pista.
+Para boxes, o jogo usa corretamente:
 
-Para boxes, o jogo usa:
-
-- posição;
-- rotação;
+- posição world;
+- rotação/ângulo world;
 - escala;
-- dimensões do objeto.
+- dimensões/bounds do objeto.
+
+Ou seja: cubo alongado vira retângulo, parede fina vira box fino, objeto rotacionado mantém ângulo.
+
+Para mesh/surface, o jogo usa os triângulos reais exportados pelo Blender. Use para chão irregular, pista, rampas, pedras grandes ou formas que não são bem representadas por box.
 
 ### Boas práticas para colliders
 
 - Use poucos colliders grandes em vez de muitos pequenos.
-- Para chão/pista, use planos retangulares `COL_Road_*` encaixados ao longo da pista.
-- Para paredes laterais, use boxes/paralelepípedos altos e estreitos.
-- Para rampas, use planos retangulares `COL_Ramp_*` rotacionados/inclinados.
-- Evite usar mesh visual complexo como collider no começo.
+- Para chão/pista, use `COL_ROAD_*` ou `COL_SURFACE_*` com malha simples.
+- Para paredes laterais, use `COL_BOX_*`/`COL_WALL_*` como boxes altos e estreitos.
+- Para rampas, use `COL_RAMP_*` com poucos triângulos.
+- Para pedra/forma irregular estática, use `COL_MESH_*` com malha simplificada.
+- Não use mesh visual detalhado como collider. Duplique e simplifique.
+- Aplique escala/rotação no objeto se o resultado no jogo parecer errado, mas cubo escalado/rotacionado funciona.
 - Deixe os colliders em uma coleção separada para poder ocultar/mostrar facilmente.
 
 ## Spawn do jogador
@@ -111,6 +119,19 @@ O jogo usará:
 - rotação do objeto para orientar o carro.
 
 Sugestão: alinhe o eixo local do objeto para apontar na direção inicial da corrida.
+
+## Triggers genéricos
+
+Triggers são volumes de overlap, sem colisão física. Use para dano, evento, troca de música, zona especial etc.
+
+Nome:
+
+```txt
+TRIGGER_DAMAGE_001
+TRIGGER_EVENT_TUNNEL_001
+```
+
+Debug draw de trigger é roxo.
 
 ## Checkpoints
 
@@ -150,8 +171,10 @@ Ela pode ser um cubo invisível, parecido com checkpoint, ou um objeto visual se
 | Tipo | Prefixo/nome | Exemplo |
 |---|---|---|
 | Visual | `VISUAL_` | `VISUAL_Track` |
-| Collider | `COL_` | `COL_ROAD_001` |
+| Box collider | `COL_BOX_`, `COL_WALL_`, `COL_OBSTACLE_` | `COL_BOX_WALL_001` |
+| Mesh/surface collider | `COL_ROAD_`, `COL_RAMP_`, `COL_SURFACE_`, `COL_MESH_` | `COL_ROAD_001` |
 | Spawn | `SPAWN_PLAYER` | `SPAWN_PLAYER` |
+| Trigger genérico | `TRIGGER_` | `TRIGGER_DAMAGE_001` |
 | Checkpoint | `CHECKPOINT_###` | `CHECKPOINT_001` |
 | Finish | `FINISH_LINE` | `FINISH_LINE` |
 
@@ -210,6 +233,9 @@ Na primeira versão da pipeline, a fase deve suportar:
 
 - visual carregado via `.glb`;
 - spawn vindo do objeto `SPAWN_PLAYER`;
-- colliders do tipo box vindos de objetos `COL_`;
+- colliders box Jolt vindos de `COL_BOX_*`, `COL_WALL_*`, `COL_OBSTACLE_*`;
+- static mesh colliders Jolt vindos de `COL_ROAD_*`, `COL_RAMP_*`, `COL_SURFACE_*`, `COL_MESH_*`;
+- player andando com capsule character controller do Jolt;
+- debug draw: colliders físicos em verde, triggers em roxo;
 - checkpoints vindos de objetos `CHECKPOINT_###`;
 - finish line vinda de `FINISH_LINE`.
