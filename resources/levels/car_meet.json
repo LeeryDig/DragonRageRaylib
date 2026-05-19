@@ -2,14 +2,19 @@
   "skybox": "resources/assets/skybox/Cubemap_Sky_12-512x512.png",
   "fog": {
     "enabled": true,
-    "color": [185, 190, 200],
+    "color": [29, 31, 31],
     "start": 8.922,
     "end": 30.461,
     "density": 3.872,
     "mode": "linear"
   },
   "lighting": {
-    "ambient": [10, 10, 15],
+    "ambient": [17, 12, 14],
+    "shadowsEnabled": true,
+    "shadowResolution": 1024,
+    "shadowBias": 0.005,
+    "shadowStrength": 0.450,
+    "shadowAreaSize": 40.000,
     "lights": [
       {
         "id": "sun",
@@ -19,15 +24,52 @@
         "rotation": [-95.592, -29.024, -78.403],
         "color": [255, 220, 170],
         "intensity": 1.000,
+        "range": 8.000,
+        "innerCone": 18.000,
+        "outerCone": 32.000,
+        "castShadows": false
+      },
+      {
+        "id": "point_02",
+        "type": "point",
+        "enabled": true,
+        "position": [-5.044, 2.051, 1.223],
+        "rotation": [162.247, 19.296, 165.955],
+        "color": [4, 244, 175],
+        "intensity": 1.118,
+        "range": 6.481,
+        "innerCone": 18.000,
+        "outerCone": 32.000,
+        "castShadows": true
+      },
+      {
+        "id": "spot_03",
+        "type": "spot",
+        "enabled": true,
+        "position": [-0.051, 4.847, 3.887],
+        "rotation": [-14.031, 51.650, 74.324],
+        "color": [255, 220, 170],
+        "intensity": 1.000,
+        "range": 10.000,
+        "innerCone": 18.000,
+        "outerCone": 32.000,
+        "castShadows": false
+      },
+      {
+        "id": "point_04",
+        "type": "point",
+        "enabled": true,
+        "position": [4.630, 2.609, 0.108],
+        "rotation": [158.363, -17.449, -180.000],
+        "color": [255, 220, 170],
+        "intensity": 1.000,
+        "range": 4.288,
+        "innerCone": 18.000,
+        "outerCone": 32.000,
         "castShadows": false
       }
     ]
   },
   "characters": [
-    {
-      "config": "resources/character/chartest.json",
-      "position": [3.721, 0.000, 0.000],
-      "rotation": [0.000, 0.000, 0.000]
-    }
   ]
 }

@@ -8,6 +8,7 @@
 #include "raylib.h"
 
 #include "debug/cameraDebug.hpp"
+#include "debug/debugIcons.hpp"
 #include "gameState.hpp"
 #include "interactionSystem.hpp"
 #include "level/levelData.hpp"
@@ -80,6 +81,7 @@ struct GameWorld {
     std::string currentLevelConfigPath;
     LevelRuntimeConfig currentLevelRuntimeConfig;
     FogShader fogShader;
+    DebugIcons debugIcons;
     PersonConfig personConfig;
     PersonState person;
     InteractionSystem interactions;

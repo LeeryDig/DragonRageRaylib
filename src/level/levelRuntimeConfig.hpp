@@ -43,6 +43,9 @@ struct LevelLightConfig {
     Quaternion rotation;
     Color color;
     float intensity;
+    float range;
+    float innerConeDegrees;
+    float outerConeDegrees;
     bool castShadows;
 
     LevelLightConfig()
@@ -53,15 +56,28 @@ struct LevelLightConfig {
           rotation{0.0f, 0.0f, 0.0f, 1.0f},
           color{255, 220, 170, 255},
           intensity(1.0f),
+          range(8.0f),
+          innerConeDegrees(18.0f),
+          outerConeDegrees(32.0f),
           castShadows(false) {}
 };
 
 struct LightingConfig {
     Color ambient;
+    bool shadowsEnabled;
+    int shadowResolution;
+    float shadowBias;
+    float shadowStrength;
+    float shadowAreaSize;
     std::vector<LevelLightConfig> lights;
 
     LightingConfig()
         : ambient{10, 10, 15, 255},
+          shadowsEnabled(false),
+          shadowResolution(1024),
+          shadowBias(0.005f),
+          shadowStrength(0.45f),
+          shadowAreaSize(40.0f),
           lights() {}
 };
 

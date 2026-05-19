@@ -10,6 +10,7 @@ namespace debug_ui {
 struct TopBarActions {
     std::function<void(GameWorld&)> restartLevel;
     std::function<void(GameWorld&)> resetGameWorld;
+    std::function<void(GameWorld&)> saveLevelRuntimeConfig;
 };
 
 struct LevelConfigActions {

@@ -258,6 +258,11 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     const JsonValue* lighting = GetMember(root, "lighting");
     if (lighting && lighting->type == JsonValue::Object) {
         config.lighting.ambient = ColorMember(*lighting, "ambient", config.lighting.ambient);
+        config.lighting.shadowsEnabled = BoolMember(*lighting, "shadowsEnabled", config.lighting.shadowsEnabled);
+        config.lighting.shadowResolution = static_cast<int>(NumberMember(*lighting, "shadowResolution", static_cast<float>(config.lighting.shadowResolution)));
+        config.lighting.shadowBias = NumberMember(*lighting, "shadowBias", config.lighting.shadowBias);
+        config.lighting.shadowStrength = NumberMember(*lighting, "shadowStrength", config.lighting.shadowStrength);
+        config.lighting.shadowAreaSize = NumberMember(*lighting, "shadowAreaSize", config.lighting.shadowAreaSize);
         const JsonValue* lights = GetMember(*lighting, "lights");
         if (lights && lights->type == JsonValue::Array) {
             config.lighting.lights.clear();
@@ -272,6 +277,9 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
                 light.rotation = QuaternionFromEulerDegrees(Vector3Member(item, "rotation", EulerDegreesFromQuaternion(light.rotation)));
                 light.color = ColorMember(item, "color", light.color);
                 light.intensity = NumberMember(item, "intensity", light.intensity);
+                light.range = NumberMember(item, "range", light.range);
+                light.innerConeDegrees = NumberMember(item, "innerCone", light.innerConeDegrees);
+                light.outerConeDegrees = NumberMember(item, "outerCone", light.outerConeDegrees);
                 light.castShadows = BoolMember(item, "castShadows", light.castShadows);
                 config.lighting.lights.push_back(light);
             }
@@ -343,6 +351,11 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
     file << "  },\n";
     file << "  \"lighting\": {\n";
     file << "    \"ambient\": [" << static_cast<int>(config.lighting.ambient.r) << ", " << static_cast<int>(config.lighting.ambient.g) << ", " << static_cast<int>(config.lighting.ambient.b) << "],\n";
+    file << "    \"shadowsEnabled\": " << (config.lighting.shadowsEnabled ? "true" : "false") << ",\n";
+    file << "    \"shadowResolution\": " << config.lighting.shadowResolution << ",\n";
+    file << "    \"shadowBias\": " << config.lighting.shadowBias << ",\n";
+    file << "    \"shadowStrength\": " << config.lighting.shadowStrength << ",\n";
+    file << "    \"shadowAreaSize\": " << config.lighting.shadowAreaSize << ",\n";
     file << "    \"lights\": [\n";
     for (std::size_t i = 0; i < config.lighting.lights.size(); ++i) {
         const LevelLightConfig& light = config.lighting.lights[i];
@@ -355,6 +368,9 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
         file << "        \"rotation\": [" << rotationDegrees.x << ", " << rotationDegrees.y << ", " << rotationDegrees.z << "],\n";
         file << "        \"color\": [" << static_cast<int>(light.color.r) << ", " << static_cast<int>(light.color.g) << ", " << static_cast<int>(light.color.b) << "],\n";
         file << "        \"intensity\": " << light.intensity << ",\n";
+        file << "        \"range\": " << light.range << ",\n";
+        file << "        \"innerCone\": " << light.innerConeDegrees << ",\n";
+        file << "        \"outerCone\": " << light.outerConeDegrees << ",\n";
         file << "        \"castShadows\": " << (light.castShadows ? "true" : "false") << "\n";
         file << "      }" << (i + 1 < config.lighting.lights.size() ? "," : "") << "\n";
     }

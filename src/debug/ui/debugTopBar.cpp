@@ -27,10 +27,24 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
     DrawRectangle(0, 0, GetScreenWidth(), 34, Color{28, 28, 32, 235});
     DrawRectangleLines(0, 0, GetScreenWidth(), 34, Color{70, 70, 78, 255});
 
+    Vector2 mouse = GetMousePosition();
+
+    bool dirty = gameWorld.debugUi.levelConfigDirty;
+    const char* saveLabel = dirty ? "Save *" : "Save";
+    int saveWidth = MeasureText(saveLabel, 18) + 24;
+    Rectangle saveRect = Rectangle{10.0f, 5.0f, static_cast<float>(saveWidth), 24.0f};
+    bool saveHovered = CheckCollisionPointRec(mouse, saveRect);
+    Color saveBg = dirty ? (saveHovered ? Color{180, 120, 20, 255} : Color{140, 90, 10, 255}) : (saveHovered ? Color{62, 62, 70, 255} : Color{42, 42, 48, 255});
+    Color saveText = dirty ? YELLOW : LIGHTGRAY;
+    DrawRectangleRec(saveRect, saveBg);
+    DrawText(saveLabel, static_cast<int>(saveRect.x + 12.0f), 8, 18, saveText);
+    if (saveHovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        if (actions.saveLevelRuntimeConfig) actions.saveLevelRuntimeConfig(gameWorld);
+    }
+
     const char* items[] = {"Game", "Level", "Inspector", "Debug", "Person", "Physics"};
     int menuX[6] = {};
-    int x = 10;
-    Vector2 mouse = GetMousePosition();
+    int x = saveWidth + 18;
     for (int i = 0; i < 6; ++i) {
         int width = MeasureText(items[i], 20) + 28;
         menuX[i] = x;

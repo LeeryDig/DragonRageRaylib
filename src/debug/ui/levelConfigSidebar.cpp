@@ -63,9 +63,9 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
     DrawText("Level", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
-    const char* tabs[] = {"Skyboxes", "Fog", "Levels"};
-    for (int i = 0; i < 3; ++i) {
-        Rectangle tab = Rectangle{x + 12.0f + i * 96.0f, 74.0f, 90.0f, 26.0f};
+    const char* tabs[] = {"Sky", "Fog", "Light", "Levels"};
+    for (int i = 0; i < 4; ++i) {
+        Rectangle tab = Rectangle{x + 12.0f + i * 74.0f, 74.0f, 68.0f, 26.0f};
         bool active = gameWorld.debugUi.levelConfigTab == i;
         bool hovered = CheckCollisionPointRec(GetMousePosition(), tab);
         DrawRectangleRec(tab, active ? Color{78, 92, 120, 255} : hovered ? Color{64, 64, 72, 255} : Color{42, 42, 48, 255});
@@ -130,9 +130,6 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
             fog.enabled = !fog.enabled;
             gameWorld.debugUi.levelConfigDirty = true;
         }
-        if (DebugButton(Rectangle{x + 146.0f, y, 96.0f, 28.0f}, "Save Fog")) {
-            if (actions.saveCurrentLevelRuntimeConfig) actions.saveCurrentLevelRuntimeConfig(gameWorld);
-        }
         y += 44.0f;
 
         float red = static_cast<float>(fog.color.r);
@@ -174,6 +171,52 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         DrawText(TextFormat("RGB %d %d %d", fog.color.r, fog.color.g, fog.color.b), static_cast<int>(x + 96.0f), static_cast<int>(y + 6.0f), 14, LIGHTGRAY);
         y += 42.0f;
         DrawText(TextFormat("Mode: linear  %s", gameWorld.debugUi.levelConfigDirty ? "[unsaved]" : "[saved]"), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, gameWorld.debugUi.levelConfigDirty ? YELLOW : LIGHTGRAY);
+        return;
+    }
+
+    if (gameWorld.debugUi.levelConfigTab == 2) {
+        Color& ambient = gameWorld.currentLevelRuntimeConfig.lighting.ambient;
+        DrawText("Ambient light per level. Realtime, save writes JSON.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
+        y += 34.0f;
+        y += 44.0f;
+        float red = static_cast<float>(ambient.r);
+        float green = static_cast<float>(ambient.g);
+        float blue = static_cast<float>(ambient.b);
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient R", red, 0.0f, 255.0f)) {
+            ambient.r = static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient G", green, 0.0f, 255.0f)) {
+            ambient.g = static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient B", blue, 0.0f, 255.0f)) {
+            ambient.b = static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 42.0f;
+        DrawRectangleRec(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, ambient);
+        DrawRectangleLinesEx(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, 1.0f, RAYWHITE);
+        DrawText(TextFormat("RGB %d %d %d", ambient.r, ambient.g, ambient.b), static_cast<int>(x + 96.0f), static_cast<int>(y + 6.0f), 14, LIGHTGRAY);
+        y += 46.0f;
+        DrawText("Shadow config saved only; renderer pass pending.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, ORANGE);
+        y += 26.0f;
+        if (DebugButton(Rectangle{x + 14.0f, y, 150.0f, 28.0f}, gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled ? "Shadows ON" : "Shadows OFF")) {
+            gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled = !gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled;
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 40.0f;
+        float bias = gameWorld.currentLevelRuntimeConfig.lighting.shadowBias;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Bias", bias, 0.0f, 0.05f)) {
+            gameWorld.currentLevelRuntimeConfig.lighting.shadowBias = bias;
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Strength", gameWorld.currentLevelRuntimeConfig.lighting.shadowStrength, 0.0f, 1.0f)) gameWorld.debugUi.levelConfigDirty = true;
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Area", gameWorld.currentLevelRuntimeConfig.lighting.shadowAreaSize, 5.0f, 120.0f)) gameWorld.debugUi.levelConfigDirty = true;
         return;
     }
 

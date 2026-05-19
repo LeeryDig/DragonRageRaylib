@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "debug/cameraDebug.hpp"
+#include "debug/debugIcons.hpp"
 #include "debug/levelDebugDraw.hpp"
 #include "debug/ui/debugUi.hpp"
 #include "game/gameWorld.hpp"
@@ -49,6 +50,7 @@ const float CONTACT_POSITION_PERCENT = 0.75f;
 const float CONTACT_SLOP = 0.001f;
 const float GRASS_HALF_WIDTH = 60.0f;
 const float GRASS_EXTRA_LENGTH = 200.0f;
+const float DEBUG_LIGHT_SPAWN_DISTANCE = 6.0f;
 
 void ApplyRuntimeRenderConfig(GameWorld& gameWorld) {
     ApplyFogShaderToModel(gameWorld.level.visualModel, gameWorld.fogShader);
@@ -882,6 +884,7 @@ GameWorld LoadGameWorld() {
     gameWorld.currentLevelConfigPath = initialLevel != nullptr ? initialLevel->configPath : std::string();
     gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
     LoadFogShader(gameWorld.fogShader);
+    LoadDebugIcons(gameWorld.debugIcons);
     gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.personConfig = LoadPersonConfig(
@@ -953,6 +956,7 @@ void UnloadGameWorld(GameWorld& gameWorld) {
     UnloadInteractionSystem(gameWorld.interactions);
     UnloadLevel(gameWorld.level);
     UnloadFogShader(gameWorld.fogShader);
+    UnloadDebugIcons(gameWorld.debugIcons);
     UnloadStaticWorld(gameWorld.world);
 }
 
@@ -1172,6 +1176,72 @@ const char* LightTypeName(LightType type) {
         case LightType::Spot: return "Spot";
     }
     return "Directional";
+}
+
+Vector3 CameraForward(const Camera& camera) {
+    Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+    return Vector3LengthSqr(forward) > 0.0001f ? forward : Vector3{0.0f, 0.0f, -1.0f};
+}
+
+Vector3 DirectionToEulerDegrees(Vector3 direction) {
+    direction = Vector3Normalize(direction);
+    float yaw = atan2f(direction.x, -direction.z);
+    float pitch = asinf(Clamp(direction.y, -1.0f, 1.0f));
+    return Vector3{pitch * RAD2DEG, yaw * RAD2DEG, 0.0f};
+}
+
+std::string BuildNewLightId(const LightingConfig& lighting, const char* prefix) {
+    return TextFormat("%s_%02d", prefix, static_cast<int>(lighting.lights.size()) + 1);
+}
+
+void AddDebugLight(GameWorld& gameWorld, LightType type) {
+    Vector3 forward = CameraForward(gameWorld.camera);
+    LevelLightConfig light;
+    light.type = type;
+    light.position = Vector3Add(gameWorld.camera.position, Vector3Scale(forward, DEBUG_LIGHT_SPAWN_DISTANCE));
+    light.rotation = QuaternionFromEulerDegrees(DirectionToEulerDegrees(forward));
+    light.color = Color{255, 220, 170, 255};
+    light.intensity = 1.0f;
+    light.castShadows = false;
+    if (type == LightType::Directional) {
+        light.id = BuildNewLightId(gameWorld.currentLevelRuntimeConfig.lighting, "dir");
+    } else if (type == LightType::Point) {
+        light.id = BuildNewLightId(gameWorld.currentLevelRuntimeConfig.lighting, "point");
+        light.range = 8.0f;
+    } else {
+        light.id = BuildNewLightId(gameWorld.currentLevelRuntimeConfig.lighting, "spot");
+        light.range = 10.0f;
+        light.innerConeDegrees = 18.0f;
+        light.outerConeDegrees = 32.0f;
+    }
+    gameWorld.currentLevelRuntimeConfig.lighting.lights.push_back(light);
+    int index = static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size()) - 1;
+    gameWorld.debugUi.selectedLevelNode = LightSelectionId(index);
+    SetVectorInput(gameWorld.debugUi.levelPositionInput, light.position);
+    SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(light.rotation));
+    gameWorld.debugUi.levelSidebarOpen = true;
+    gameWorld.debugUi.levelConfigDirty = true;
+}
+
+void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
+    if (gameWorld.debugUi.selectedLevelNode <= -300000) {
+        int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (lightIndex < 0 || lightIndex >= static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size())) return;
+        gameWorld.currentLevelRuntimeConfig.lighting.lights.erase(gameWorld.currentLevelRuntimeConfig.lighting.lights.begin() + lightIndex);
+        gameWorld.debugUi.selectedLevelNode = -1;
+        gameWorld.debugUi.levelConfigDirty = true;
+        return;
+    }
+    if (gameWorld.debugUi.selectedLevelNode <= -1000 && gameWorld.debugUi.selectedLevelNode > -200000) {
+        int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (characterIndex < 0 || characterIndex >= static_cast<int>(gameWorld.currentLevelRuntimeConfig.characters.size())) return;
+        gameWorld.currentLevelRuntimeConfig.characters.erase(gameWorld.currentLevelRuntimeConfig.characters.begin() + characterIndex);
+        UnloadInteractionSystem(gameWorld.interactions);
+        gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
+        ApplyRuntimeRenderConfig(gameWorld);
+        gameWorld.debugUi.selectedLevelNode = -1;
+        gameWorld.debugUi.levelConfigDirty = true;
+    }
 }
 
 bool DecodeCharacterPartSelection(int selection, int& characterIndex, int& kind, int& partIndex) {
@@ -1641,8 +1711,14 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         }
         if (editingCharacter) {
             editY += 34.0f;
-            if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, gameWorld.debugUi.levelConfigDirty ? "Save car_meet.json *" : "Save car_meet.json")) {
-                SaveCurrentLevelRuntimeConfig(gameWorld);
+            Rectangle deleteRect = Rectangle{x + 214.0f, editY, 92.0f, 26.0f};
+            DrawRectangleRec(deleteRect, CheckCollisionPointRec(GetMousePosition(), deleteRect) ? Color{150, 55, 45, 255} : Color{115, 42, 36, 255});
+            DrawRectangleLinesEx(deleteRect, 1.0f, Color{190, 90, 75, 255});
+            DrawDebugIcon2D(gameWorld.debugIcons, "delete", Vector2{deleteRect.x + 8.0f, deleteRect.y + 2.0f}, 22.0f, ORANGE);
+            DrawText("Delete", static_cast<int>(deleteRect.x + 34.0f), static_cast<int>(deleteRect.y + 6.0f), 14, RAYWHITE);
+            if (CheckCollisionPointRec(GetMousePosition(), deleteRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                DeleteSelectedDebugRoot(gameWorld);
+                return;
             }
             editY += 40.0f;
             const char* detailTabs[] = {"VISUAL", "COL", "ICON", "SP/TR", "OTHER"};
@@ -1711,7 +1787,15 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Red", red, 0.0f, 255.0f) || changed; editY += 28.0f;
             changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Green", green, 0.0f, 255.0f) || changed; editY += 28.0f;
             changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Blue", blue, 0.0f, 255.0f) || changed; editY += 28.0f;
-            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Intensity", light.intensity, 0.0f, 4.0f) || changed; editY += 34.0f;
+            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Intensity", light.intensity, 0.0f, 4.0f) || changed; editY += 28.0f;
+            if (light.type == LightType::Point || light.type == LightType::Spot) changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Range", light.range, 0.5f, 50.0f) || changed;
+            editY += 28.0f;
+            if (light.type == LightType::Spot) {
+                changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Inner", light.innerConeDegrees, 1.0f, 80.0f) || changed; editY += 28.0f;
+                changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Outer", light.outerConeDegrees, 2.0f, 90.0f) || changed; editY += 28.0f;
+                if (light.outerConeDegrees < light.innerConeDegrees + 1.0f) light.outerConeDegrees = light.innerConeDegrees + 1.0f;
+            }
+            editY += 6.0f;
             light.color = Color{static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f)), static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f)), static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f)), 255};
 
             if (changed) {
@@ -1729,8 +1813,14 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 gameWorld.debugUi.levelConfigDirty = true;
             }
             editY += 34.0f;
-            if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, gameWorld.debugUi.levelConfigDirty ? "Save level config *" : "Save level config")) {
-                SaveCurrentLevelRuntimeConfig(gameWorld);
+            Rectangle deleteRect = Rectangle{x + 214.0f, editY, 92.0f, 26.0f};
+            DrawRectangleRec(deleteRect, CheckCollisionPointRec(GetMousePosition(), deleteRect) ? Color{150, 55, 45, 255} : Color{115, 42, 36, 255});
+            DrawRectangleLinesEx(deleteRect, 1.0f, Color{190, 90, 75, 255});
+            DrawDebugIcon2D(gameWorld.debugIcons, "delete", Vector2{deleteRect.x + 8.0f, deleteRect.y + 2.0f}, 22.0f, ORANGE);
+            DrawText("Delete", static_cast<int>(deleteRect.x + 34.0f), static_cast<int>(deleteRect.y + 6.0f), 14, RAYWHITE);
+            if (CheckCollisionPointRec(GetMousePosition(), deleteRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                DeleteSelectedDebugRoot(gameWorld);
+                return;
             }
         }
     }
@@ -1942,6 +2032,47 @@ void DrawDebugPanels(GameWorld& gameWorld) {
     }
 }
 
+void DrawDebugAddLightContextMenu(GameWorld& gameWorld) {
+    static bool open = false;
+    static Vector2 pos = Vector2Zero();
+    float sidebarWidth = gameWorld.debugUi.levelSidebarOpen || gameWorld.debugUi.levelConfigOpen ? 390.0f : 0.0f;
+    Rectangle topBar = Rectangle{0.0f, 0.0f, static_cast<float>(GetScreenWidth()), 34.0f};
+    Rectangle rightPanel = Rectangle{static_cast<float>(GetScreenWidth()) - sidebarWidth, 34.0f, sidebarWidth, static_cast<float>(GetScreenHeight()) - 34.0f};
+    Vector2 mouse = GetMousePosition();
+    bool overUi = CheckCollisionPointRec(mouse, topBar) || (sidebarWidth > 0.0f && CheckCollisionPointRec(mouse, rightPanel));
+
+    if (gameWorld.debugUi.enabled && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_A) && !overUi) {
+        open = true;
+        pos = GetMousePosition();
+    }
+    if (!open) return;
+
+    Rectangle menu = Rectangle{pos.x, pos.y, 210.0f, 122.0f};
+    DrawRectangleRec(menu, Color{32, 32, 38, 245});
+    DrawRectangleLinesEx(menu, 1.0f, Color{95, 95, 105, 255});
+    DrawText("Add > Lights", static_cast<int>(menu.x + 10.0f), static_cast<int>(menu.y + 8.0f), 16, YELLOW);
+
+    Rectangle dir = Rectangle{menu.x + 8.0f, menu.y + 34.0f, menu.width - 16.0f, 26.0f};
+    Rectangle point = Rectangle{menu.x + 8.0f, menu.y + 62.0f, menu.width - 16.0f, 26.0f};
+    Rectangle spot = Rectangle{menu.x + 8.0f, menu.y + 90.0f, menu.width - 16.0f, 26.0f};
+    if (DebugMenuItem(dir, "Directional Light")) { AddDebugLight(gameWorld, LightType::Directional); open = false; }
+    if (DebugMenuItem(point, "Point Light")) { AddDebugLight(gameWorld, LightType::Point); open = false; }
+    if (DebugMenuItem(spot, "Spot Light")) { AddDebugLight(gameWorld, LightType::Spot); open = false; }
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !CheckCollisionPointRec(mouse, menu)) open = false;
+}
+
+void DrawDebugLightIcons2D(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.levelSidebarOpen) return;
+    for (std::size_t i = 0; i < gameWorld.currentLevelRuntimeConfig.lighting.lights.size(); ++i) {
+        const LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[i];
+        if (!light.enabled) continue;
+        Color color = gameWorld.debugUi.selectedLevelNode == LightSelectionId(static_cast<int>(i)) ? YELLOW : light.color;
+        const char* icon = light.type == LightType::Directional ? "wb_sunny" : light.type == LightType::Point ? "lightbulb" : "flashlight_on";
+        DrawDebugIconBillboard(gameWorld.debugIcons, gameWorld.camera, icon, light.position, gameWorld.debugUi.selectedLevelNode == LightSelectionId(static_cast<int>(i)) ? 34.0f : 28.0f, color);
+    }
+}
+
 void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
     DrawLevelSkybox(gameWorld.level, gameWorld.camera);
@@ -1962,8 +2093,15 @@ void DrawGameplay(GameWorld& gameWorld) {
             Color color = light.color;
             if (gameWorld.debugUi.selectedLevelNode == LightSelectionId(static_cast<int>(i))) color = YELLOW;
             Vector3 direction = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, light.rotation));
-            DrawSphere(light.position, 0.18f, color);
-            DrawLine3D(light.position, Vector3Add(light.position, Vector3Scale(direction, 2.5f)), color);
+            if (light.type == LightType::Point) {
+                DrawSphereWires(light.position, light.range, 12, 12, color);
+            } else if (light.type == LightType::Spot) {
+                DrawLine3D(light.position, Vector3Add(light.position, Vector3Scale(direction, light.range)), color);
+                float radius = tanf(light.outerConeDegrees * DEG2RAD) * light.range;
+                DrawCylinderWiresEx(light.position, Vector3Add(light.position, Vector3Scale(direction, light.range)), 0.0f, radius, 16, color);
+            } else {
+                DrawLine3D(light.position, Vector3Add(light.position, Vector3Scale(direction, 2.5f)), color);
+            }
         }
         if (gameWorld.debugUi.selectedLevelNode == -2) {
             Vector3 p = gameWorld.level.rootPosition;
@@ -2006,7 +2144,8 @@ void DrawGameplay(GameWorld& gameWorld) {
         DrawTransformGizmo(gameWorld);
     }
     EndMode3D();
-    debug_ui::DrawTopBar(gameWorld, debug_ui::TopBarActions{RestartLevel, ResetGameWorld});
+    DrawDebugLightIcons2D(gameWorld);
+    debug_ui::DrawTopBar(gameWorld, debug_ui::TopBarActions{RestartLevel, ResetGameWorld, SaveCurrentLevelRuntimeConfig});
     DrawDebugPanels(gameWorld);
     DrawLevelSidebar(gameWorld);
     debug_ui::DrawLevelConfigSidebar(gameWorld, debug_ui::LevelConfigActions{
@@ -2015,6 +2154,7 @@ void DrawGameplay(GameWorld& gameWorld) {
         LoadConfiguredLevel,
         MoveLevelConfigEntry
     });
+    DrawDebugAddLightContextMenu(gameWorld);
     DrawInteractionUi(gameWorld.interactions);
     if (gameWorld.debugUi.enabled) {
         DrawDebugAxisGizmo(gameWorld.camera);

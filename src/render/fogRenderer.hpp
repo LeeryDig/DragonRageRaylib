@@ -6,6 +6,10 @@
 #include "level/levelRuntimeConfig.hpp"
 
 struct FogShader {
+    static const int MaxDirectionalLights = 2;
+    static const int MaxPointLights = 4;
+    static const int MaxSpotLights = 2;
+
     Shader shader;
     int cameraPositionLoc;
     int fogColorLoc;
@@ -14,24 +18,28 @@ struct FogShader {
     int fogDensityLoc;
     int fogEnabledLoc;
     int ambientColorLoc;
-    int directionalLightEnabledLoc;
-    int directionalLightDirectionLoc;
-    int directionalLightColorLoc;
-    int directionalLightIntensityLoc;
+    int directionalLightCountLoc;
+    int directionalLightEnabledLoc[MaxDirectionalLights];
+    int directionalLightDirectionLoc[MaxDirectionalLights];
+    int directionalLightColorLoc[MaxDirectionalLights];
+    int directionalLightIntensityLoc[MaxDirectionalLights];
+    int pointLightCountLoc;
+    int pointLightEnabledLoc[MaxPointLights];
+    int pointLightPositionLoc[MaxPointLights];
+    int pointLightColorLoc[MaxPointLights];
+    int pointLightIntensityLoc[MaxPointLights];
+    int pointLightRangeLoc[MaxPointLights];
+    int spotLightCountLoc;
+    int spotLightEnabledLoc[MaxSpotLights];
+    int spotLightPositionLoc[MaxSpotLights];
+    int spotLightDirectionLoc[MaxSpotLights];
+    int spotLightColorLoc[MaxSpotLights];
+    int spotLightIntensityLoc[MaxSpotLights];
+    int spotLightRangeLoc[MaxSpotLights];
+    int spotLightInnerConeLoc[MaxSpotLights];
+    int spotLightOuterConeLoc[MaxSpotLights];
 
-    FogShader()
-        : shader(),
-          cameraPositionLoc(-1),
-          fogColorLoc(-1),
-          fogStartLoc(-1),
-          fogEndLoc(-1),
-          fogDensityLoc(-1),
-          fogEnabledLoc(-1),
-          ambientColorLoc(-1),
-          directionalLightEnabledLoc(-1),
-          directionalLightDirectionLoc(-1),
-          directionalLightColorLoc(-1),
-          directionalLightIntensityLoc(-1) {}
+    FogShader();
 };
 
 bool LoadFogShader(FogShader& fogShader);
