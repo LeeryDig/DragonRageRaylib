@@ -1,5 +1,13 @@
 {
   "skybox": "resources/assets/skybox/Cubemap_Sky_12-512x512.png",
+  "fog": {
+    "enabled": false,
+    "color": [185, 190, 200],
+    "start": 0.858,
+    "end": 391.799,
+    "density": 2.911,
+    "mode": "linear"
+  },
   "characters": [
     {
       "config": "resources/character/chartest.json",

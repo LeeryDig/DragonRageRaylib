@@ -131,6 +131,48 @@ std::string StringMember(const JsonValue& value, const char* name, const std::st
     return member && member->type == JsonValue::String ? member->stringValue : fallback;
 }
 
+bool BoolMember(const JsonValue& value, const char* name, bool fallback) {
+    const JsonValue* member = GetMember(value, name);
+    return member && member->type == JsonValue::Bool ? member->boolValue : fallback;
+}
+
+float NumberMember(const JsonValue& value, const char* name, float fallback) {
+    const JsonValue* member = GetMember(value, name);
+    return member && member->type == JsonValue::Number ? static_cast<float>(member->numberValue) : fallback;
+}
+
+int ColorChannelAt(const JsonValue* arrayValue, std::size_t index, unsigned char fallback) {
+    if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
+    const JsonValue& value = arrayValue->arrayValue[index];
+    if (value.type != JsonValue::Number) return fallback;
+    int channel = static_cast<int>(value.numberValue);
+    if (channel < 0) return 0;
+    if (channel > 255) return 255;
+    return channel;
+}
+
+Color ColorMember(const JsonValue& value, const char* name, Color fallback) {
+    const JsonValue* member = GetMember(value, name);
+    return Color{
+        static_cast<unsigned char>(ColorChannelAt(member, 0, fallback.r)),
+        static_cast<unsigned char>(ColorChannelAt(member, 1, fallback.g)),
+        static_cast<unsigned char>(ColorChannelAt(member, 2, fallback.b)),
+        255
+    };
+}
+
+FogMode FogModeFromString(const std::string& mode) {
+    if (mode == "linear") return FogMode::Linear;
+    return FogMode::Linear;
+}
+
+const char* FogModeToString(FogMode mode) {
+    switch (mode) {
+        case FogMode::Linear: return "linear";
+    }
+    return "linear";
+}
+
 float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
     if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
     const JsonValue& value = arrayValue->arrayValue[index];
@@ -161,6 +203,16 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
 
     config.skyboxPath = StringMember(root, "skybox", "");
 
+    const JsonValue* fog = GetMember(root, "fog");
+    if (fog && fog->type == JsonValue::Object) {
+        config.fog.enabled = BoolMember(*fog, "enabled", config.fog.enabled);
+        config.fog.color = ColorMember(*fog, "color", config.fog.color);
+        config.fog.start = NumberMember(*fog, "start", config.fog.start);
+        config.fog.end = NumberMember(*fog, "end", config.fog.end);
+        config.fog.density = NumberMember(*fog, "density", config.fog.density);
+        config.fog.mode = FogModeFromString(StringMember(*fog, "mode", FogModeToString(config.fog.mode)));
+    }
+
     const JsonValue* characters = GetMember(root, "characters");
     if (characters && characters->type == JsonValue::Array) {
         for (std::size_t i = 0; i < characters->arrayValue.size(); ++i) {
@@ -176,9 +228,10 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     }
 
     TraceLog(LOG_INFO,
-        "Level config: loaded %s skybox=%s characters=%zu",
+        "Level config: loaded %s skybox=%s fog=%s characters=%zu",
         configPath.c_str(),
         config.skyboxPath.empty() ? "(none)" : config.skyboxPath.c_str(),
+        config.fog.enabled ? "on" : "off",
         config.characters.size());
     return config;
 }
@@ -197,6 +250,14 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
     if (!config.skyboxPath.empty()) {
         file << "  \"skybox\": \"" << config.skyboxPath << "\",\n";
     }
+    file << "  \"fog\": {\n";
+    file << "    \"enabled\": " << (config.fog.enabled ? "true" : "false") << ",\n";
+    file << "    \"color\": [" << static_cast<int>(config.fog.color.r) << ", " << static_cast<int>(config.fog.color.g) << ", " << static_cast<int>(config.fog.color.b) << "],\n";
+    file << "    \"start\": " << config.fog.start << ",\n";
+    file << "    \"end\": " << config.fog.end << ",\n";
+    file << "    \"density\": " << config.fog.density << ",\n";
+    file << "    \"mode\": \"" << FogModeToString(config.fog.mode) << "\"\n";
+    file << "  },\n";
     file << "  \"characters\": [\n";
     for (std::size_t i = 0; i < config.characters.size(); ++i) {
         const CharacterSpawnConfig& character = config.characters[i];

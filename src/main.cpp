@@ -50,6 +50,15 @@ const float CONTACT_SLOP = 0.001f;
 const float GRASS_HALF_WIDTH = 60.0f;
 const float GRASS_EXTRA_LENGTH = 200.0f;
 
+void ApplyRuntimeRenderConfig(GameWorld& gameWorld) {
+    ApplyFogShaderToModel(gameWorld.level.visualModel, gameWorld.fogShader);
+    for (std::size_t i = 0; i < gameWorld.interactions.characters.size(); ++i) {
+        if (gameWorld.interactions.characters[i].hasModel) {
+            ApplyFogShaderToModel(gameWorld.interactions.characters[i].model, gameWorld.fogShader);
+        }
+    }
+}
+
 std::string DisplayNameFromPath(const std::string& path) {
     std::size_t slash = path.find_last_of("/\\");
     std::string filename = slash == std::string::npos ? path : path.substr(slash + 1);
@@ -872,12 +881,15 @@ GameWorld LoadGameWorld() {
     gameWorld.currentLevelPath = initialLevel != nullptr ? initialLevel->path : std::string();
     gameWorld.currentLevelConfigPath = initialLevel != nullptr ? initialLevel->configPath : std::string();
     gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
+    LoadFogShader(gameWorld.fogShader);
     gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
+    ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
     gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
+    ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.chaseCamera = LoadChaseCameraConfig(
         Utils::ResolveProjectPath(CAMERA_CONFIG_PATH),
         fallbackChaseCamera);
@@ -940,6 +952,7 @@ void UnloadGameWorld(GameWorld& gameWorld) {
     }
     UnloadInteractionSystem(gameWorld.interactions);
     UnloadLevel(gameWorld.level);
+    UnloadFogShader(gameWorld.fogShader);
     UnloadStaticWorld(gameWorld.world);
 }
 
@@ -1029,12 +1042,14 @@ void RestartLevel(GameWorld& gameWorld) {
     gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
     gameWorld.debugUi.levelConfigDirty = false;
     gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
+    ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
     UnloadInteractionSystem(gameWorld.interactions);
     gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
+    ApplyRuntimeRenderConfig(gameWorld);
     ResetGameWorld(gameWorld);
 }
 
@@ -1049,12 +1064,14 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
     gameWorld.currentLevelRuntimeConfig = LoadLevelRuntimeConfig(gameWorld.currentLevelConfigPath);
     gameWorld.debugUi.levelConfigDirty = false;
     gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
+    ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.personConfig = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH),
         DefaultPersonConfig());
     gameWorld.person = CreatePersonState(gameWorld.personConfig);
     UnloadInteractionSystem(gameWorld.interactions);
     gameWorld.interactions = LoadInteractionSystem(gameWorld.currentLevelRuntimeConfig.characters);
+    ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.debugUi.selectedLevelNode = -1;
     gameWorld.debugUi.levelSidebarScroll = 0;
     gameWorld.debugUi.activeMenu = -1;
@@ -1220,6 +1237,7 @@ void SaveCurrentLevelRuntimeConfig(GameWorld& gameWorld) {
 void ReloadCurrentLevelForConfig(GameWorld& gameWorld) {
     UnloadLevel(gameWorld.level);
     gameWorld.level = LoadLevel(gameWorld.currentLevelPath, gameWorld.currentLevelRuntimeConfig.skyboxPath);
+    ApplyRuntimeRenderConfig(gameWorld);
     ResetGameWorld(gameWorld);
 }
 
@@ -1814,6 +1832,7 @@ void DrawDebugPanels(GameWorld& gameWorld) {
 void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
     DrawLevelSkybox(gameWorld.level, gameWorld.camera);
+    UpdateFogShader(gameWorld.fogShader, gameWorld.currentLevelRuntimeConfig.fog, gameWorld.camera);
     DrawLevel(gameWorld.level);
     DrawInteractableCharacters(gameWorld.interactions);
     if (gameWorld.debugUi.showForces) {

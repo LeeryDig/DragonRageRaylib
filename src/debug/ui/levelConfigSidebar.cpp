@@ -63,8 +63,8 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
     DrawText("Level", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
-    const char* tabs[] = {"Skyboxes", "Levels"};
-    for (int i = 0; i < 2; ++i) {
+    const char* tabs[] = {"Skyboxes", "Fog", "Levels"};
+    for (int i = 0; i < 3; ++i) {
         Rectangle tab = Rectangle{x + 12.0f + i * 96.0f, 74.0f, 90.0f, 26.0f};
         bool active = gameWorld.debugUi.levelConfigTab == i;
         bool hovered = CheckCollisionPointRec(GetMousePosition(), tab);
@@ -118,6 +118,62 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         float bottomY = y + visibleRows * rowH + 12.0f;
         std::string currentLabel = gameWorld.currentLevelRuntimeConfig.skyboxPath.empty() ? "(none)" : FileNameFromPath(gameWorld.currentLevelRuntimeConfig.skyboxPath);
         DrawText(TextFormat("Current: %s", currentLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(bottomY), 14, LIGHTGRAY);
+        return;
+    }
+
+    if (gameWorld.debugUi.levelConfigTab == 1) {
+        FogConfig& fog = gameWorld.currentLevelRuntimeConfig.fog;
+        DrawText("Simple linear distance fog. Skybox stays clean.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
+        y += 32.0f;
+
+        if (DebugButton(Rectangle{x + 14.0f, y, 120.0f, 28.0f}, fog.enabled ? "Enabled" : "Disabled")) {
+            fog.enabled = !fog.enabled;
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        if (DebugButton(Rectangle{x + 146.0f, y, 96.0f, 28.0f}, "Save Fog")) {
+            if (actions.saveCurrentLevelRuntimeConfig) actions.saveCurrentLevelRuntimeConfig(gameWorld);
+        }
+        y += 44.0f;
+
+        float red = static_cast<float>(fog.color.r);
+        float green = static_cast<float>(fog.color.g);
+        float blue = static_cast<float>(fog.color.b);
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Red", red, 0.0f, 255.0f)) {
+            fog.color.r = static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Green", green, 0.0f, 255.0f)) {
+            fog.color.g = static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Blue", blue, 0.0f, 255.0f)) {
+            fog.color.b = static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f));
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 40.0f;
+
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Start", fog.start, 0.0f, 500.0f)) {
+            if (fog.start > fog.end - 1.0f) fog.end = fog.start + 1.0f;
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "End", fog.end, 1.0f, 800.0f)) {
+            if (fog.end < fog.start + 1.0f) fog.start = fog.end - 1.0f;
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 32.0f;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Density", fog.density, 0.25f, 4.0f)) {
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+        y += 42.0f;
+
+        DrawRectangleRec(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, fog.color);
+        DrawRectangleLinesEx(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, 1.0f, RAYWHITE);
+        DrawText(TextFormat("RGB %d %d %d", fog.color.r, fog.color.g, fog.color.b), static_cast<int>(x + 96.0f), static_cast<int>(y + 6.0f), 14, LIGHTGRAY);
+        y += 42.0f;
+        DrawText(TextFormat("Mode: linear  %s", gameWorld.debugUi.levelConfigDirty ? "[unsaved]" : "[saved]"), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, gameWorld.debugUi.levelConfigDirty ? YELLOW : LIGHTGRAY);
         return;
     }
 

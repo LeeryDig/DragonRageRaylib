@@ -15,6 +15,7 @@
 #include "level/levelRuntimeConfig.hpp"
 #include "personController.hpp"
 #include "physics/physicsWorld.hpp"
+#include "render/fogRenderer.hpp"
 #include "physics/jolt/joltWorld.hpp"
 #include "physics/shapes/boxShape.hpp"
 #include "staticWorld.hpp"
@@ -78,6 +79,7 @@ struct GameWorld {
     std::string currentLevelPath;
     std::string currentLevelConfigPath;
     LevelRuntimeConfig currentLevelRuntimeConfig;
+    FogShader fogShader;
     PersonConfig personConfig;
     PersonState person;
     InteractionSystem interactions;
