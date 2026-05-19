@@ -1,5 +1,6 @@
 #include "render/fogRenderer.hpp"
 
+#include "raymath.h"
 #include "utils.hpp"
 
 bool LoadFogShader(FogShader& fogShader) {
@@ -14,6 +15,7 @@ bool LoadFogShader(FogShader& fogShader) {
     fogShader.shader.locs[SHADER_LOC_VERTEX_POSITION] = GetShaderLocationAttrib(fogShader.shader, "vertexPosition");
     fogShader.shader.locs[SHADER_LOC_VERTEX_TEXCOORD01] = GetShaderLocationAttrib(fogShader.shader, "vertexTexCoord");
     fogShader.shader.locs[SHADER_LOC_VERTEX_COLOR] = GetShaderLocationAttrib(fogShader.shader, "vertexColor");
+    fogShader.shader.locs[SHADER_LOC_VERTEX_NORMAL] = GetShaderLocationAttrib(fogShader.shader, "vertexNormal");
     fogShader.shader.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(fogShader.shader, "mvp");
     fogShader.shader.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocation(fogShader.shader, "matModel");
     fogShader.shader.locs[SHADER_LOC_MAP_DIFFUSE] = GetShaderLocation(fogShader.shader, "texture0");
@@ -25,6 +27,11 @@ bool LoadFogShader(FogShader& fogShader) {
     fogShader.fogEndLoc = GetShaderLocation(fogShader.shader, "fogEnd");
     fogShader.fogDensityLoc = GetShaderLocation(fogShader.shader, "fogDensity");
     fogShader.fogEnabledLoc = GetShaderLocation(fogShader.shader, "fogEnabled");
+    fogShader.ambientColorLoc = GetShaderLocation(fogShader.shader, "ambientColor");
+    fogShader.directionalLightEnabledLoc = GetShaderLocation(fogShader.shader, "directionalLightEnabled");
+    fogShader.directionalLightDirectionLoc = GetShaderLocation(fogShader.shader, "directionalLightDirection");
+    fogShader.directionalLightColorLoc = GetShaderLocation(fogShader.shader, "directionalLightColor");
+    fogShader.directionalLightIntensityLoc = GetShaderLocation(fogShader.shader, "directionalLightIntensity");
     return true;
 }
 
@@ -61,4 +68,36 @@ void UpdateFogShader(const FogShader& fogShader, const FogConfig& config, const 
     SetShaderValue(fogShader.shader, fogShader.fogEndLoc, &fogEnd, SHADER_UNIFORM_FLOAT);
     SetShaderValue(fogShader.shader, fogShader.fogDensityLoc, &density, SHADER_UNIFORM_FLOAT);
     SetShaderValue(fogShader.shader, fogShader.fogEnabledLoc, &enabled, SHADER_UNIFORM_INT);
+}
+
+void UpdateLightingShader(const FogShader& fogShader, const LightingConfig& config) {
+    if (fogShader.shader.id == 0) return;
+
+    float ambient[3] = {
+        static_cast<float>(config.ambient.r) / 255.0f,
+        static_cast<float>(config.ambient.g) / 255.0f,
+        static_cast<float>(config.ambient.b) / 255.0f
+    };
+    int enabled = 0;
+    Vector3 direction = Vector3{0.0f, -1.0f, 0.0f};
+    float lightColor[3] = {1.0f, 1.0f, 1.0f};
+    float intensity = 0.0f;
+
+    for (std::size_t i = 0; i < config.lights.size(); ++i) {
+        const LevelLightConfig& light = config.lights[i];
+        if (!light.enabled || light.type != LightType::Directional) continue;
+        enabled = 1;
+        direction = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, light.rotation));
+        lightColor[0] = static_cast<float>(light.color.r) / 255.0f;
+        lightColor[1] = static_cast<float>(light.color.g) / 255.0f;
+        lightColor[2] = static_cast<float>(light.color.b) / 255.0f;
+        intensity = light.intensity;
+        break;
+    }
+
+    SetShaderValue(fogShader.shader, fogShader.ambientColorLoc, ambient, SHADER_UNIFORM_VEC3);
+    SetShaderValue(fogShader.shader, fogShader.directionalLightEnabledLoc, &enabled, SHADER_UNIFORM_INT);
+    SetShaderValue(fogShader.shader, fogShader.directionalLightDirectionLoc, &direction, SHADER_UNIFORM_VEC3);
+    SetShaderValue(fogShader.shader, fogShader.directionalLightColorLoc, lightColor, SHADER_UNIFORM_VEC3);
+    SetShaderValue(fogShader.shader, fogShader.directionalLightIntensityLoc, &intensity, SHADER_UNIFORM_FLOAT);
 }

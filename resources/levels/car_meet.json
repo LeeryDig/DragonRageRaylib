@@ -1,12 +1,27 @@
 {
   "skybox": "resources/assets/skybox/Cubemap_Sky_12-512x512.png",
   "fog": {
-    "enabled": false,
+    "enabled": true,
     "color": [185, 190, 200],
-    "start": 0.858,
-    "end": 391.799,
-    "density": 2.911,
+    "start": 8.922,
+    "end": 30.461,
+    "density": 3.872,
     "mode": "linear"
+  },
+  "lighting": {
+    "ambient": [10, 10, 15],
+    "lights": [
+      {
+        "id": "sun",
+        "type": "directional",
+        "enabled": true,
+        "position": [0.000, 10.000, 0.000],
+        "rotation": [-95.592, -29.024, -78.403],
+        "color": [255, 220, 170],
+        "intensity": 1.000,
+        "castShadows": false
+      }
+    ]
   },
   "characters": [
     {

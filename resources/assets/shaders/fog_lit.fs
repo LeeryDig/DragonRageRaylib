@@ -3,6 +3,7 @@
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragWorldPosition;
+in vec3 fragWorldNormal;
 
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
@@ -12,12 +13,29 @@ uniform float fogStart;
 uniform float fogEnd;
 uniform float fogDensity;
 uniform int fogEnabled;
+uniform vec3 ambientColor;
+uniform int directionalLightEnabled;
+uniform vec3 directionalLightDirection;
+uniform vec3 directionalLightColor;
+uniform float directionalLightIntensity;
 
 out vec4 finalColor;
 
 void main()
 {
-    vec4 texelColor = texture(texture0, fragTexCoord)*colDiffuse*fragColor;
+    vec4 baseColor = texture(texture0, fragTexCoord)*colDiffuse*fragColor;
+    vec3 normal = normalize(fragWorldNormal);
+    vec3 litColor = ambientColor;
+
+    if (directionalLightEnabled == 1)
+    {
+        vec3 lightToSurface = normalize(-directionalLightDirection);
+        float ndotl = max(dot(normal, lightToSurface), 0.0);
+        ndotl = floor(ndotl*8.0)/8.0;
+        litColor += directionalLightColor*directionalLightIntensity*ndotl;
+    }
+
+    vec4 texelColor = vec4(baseColor.rgb*clamp(litColor, 0.0, 1.5), baseColor.a);
 
     if (fogEnabled == 1)
     {

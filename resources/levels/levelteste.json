@@ -1,4 +1,19 @@
 {
   "skybox": "resources/assets/skybox/Cubemap_Sky_01-512x512.png",
+  "lighting": {
+    "ambient": [10, 10, 15],
+    "lights": [
+      {
+        "id": "sun",
+        "type": "directional",
+        "enabled": true,
+        "position": [0.0, 10.0, 0.0],
+        "rotation": [-63.0, -53.0, 0.0],
+        "color": [255, 220, 170],
+        "intensity": 1.0,
+        "castShadows": false
+      }
+    ]
+  },
   "characters": []
 }

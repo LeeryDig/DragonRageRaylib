@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <map>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "raylib.h"
+#include "raymath.h"
 #include "utils.hpp"
 
 namespace {
@@ -173,6 +175,21 @@ const char* FogModeToString(FogMode mode) {
     return "linear";
 }
 
+LightType LightTypeFromString(const std::string& type) {
+    if (type == "point") return LightType::Point;
+    if (type == "spot") return LightType::Spot;
+    return LightType::Directional;
+}
+
+const char* LightTypeToString(LightType type) {
+    switch (type) {
+        case LightType::Directional: return "directional";
+        case LightType::Point: return "point";
+        case LightType::Spot: return "spot";
+    }
+    return "directional";
+}
+
 float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
     if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
     const JsonValue& value = arrayValue->arrayValue[index];
@@ -182,6 +199,31 @@ float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
 Vector3 Vector3Member(const JsonValue& value, const char* name, Vector3 fallback) {
     const JsonValue* member = GetMember(value, name);
     return Vector3{NumberAt(member, 0, fallback.x), NumberAt(member, 1, fallback.y), NumberAt(member, 2, fallback.z)};
+}
+
+Quaternion QuaternionFromEulerDegrees(Vector3 degrees) {
+    return QuaternionFromEuler(degrees.x * DEG2RAD, degrees.y * DEG2RAD, degrees.z * DEG2RAD);
+}
+
+Vector3 EulerDegreesFromQuaternion(Quaternion rotation) {
+    Vector3 radians = QuaternionToEuler(rotation);
+    return Vector3{radians.x * RAD2DEG, radians.y * RAD2DEG, radians.z * RAD2DEG};
+}
+
+Vector3 DirectionToEulerDegrees(Vector3 direction) {
+    direction = Vector3Normalize(direction);
+    float yaw = atan2f(direction.x, -direction.z);
+    float pitch = asinf(Clamp(direction.y, -1.0f, 1.0f));
+    return Vector3{pitch * RAD2DEG, yaw * RAD2DEG, 0.0f};
+}
+
+void EnsureDefaultSun(LightingConfig& lighting) {
+    if (!lighting.lights.empty()) return;
+    LevelLightConfig sun;
+    sun.id = "sun";
+    sun.type = LightType::Directional;
+    sun.rotation = QuaternionFromEulerDegrees(DirectionToEulerDegrees(Vector3{-0.4f, -1.0f, -0.3f}));
+    lighting.lights.push_back(sun);
 }
 
 }  // namespace
@@ -213,6 +255,46 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
         config.fog.mode = FogModeFromString(StringMember(*fog, "mode", FogModeToString(config.fog.mode)));
     }
 
+    const JsonValue* lighting = GetMember(root, "lighting");
+    if (lighting && lighting->type == JsonValue::Object) {
+        config.lighting.ambient = ColorMember(*lighting, "ambient", config.lighting.ambient);
+        const JsonValue* lights = GetMember(*lighting, "lights");
+        if (lights && lights->type == JsonValue::Array) {
+            config.lighting.lights.clear();
+            for (std::size_t i = 0; i < lights->arrayValue.size(); ++i) {
+                const JsonValue& item = lights->arrayValue[i];
+                if (item.type != JsonValue::Object) continue;
+                LevelLightConfig light;
+                light.id = StringMember(item, "id", i == 0 ? "sun" : "light");
+                light.type = LightTypeFromString(StringMember(item, "type", LightTypeToString(light.type)));
+                light.enabled = BoolMember(item, "enabled", light.enabled);
+                light.position = Vector3Member(item, "position", light.position);
+                light.rotation = QuaternionFromEulerDegrees(Vector3Member(item, "rotation", EulerDegreesFromQuaternion(light.rotation)));
+                light.color = ColorMember(item, "color", light.color);
+                light.intensity = NumberMember(item, "intensity", light.intensity);
+                light.castShadows = BoolMember(item, "castShadows", light.castShadows);
+                config.lighting.lights.push_back(light);
+            }
+        } else {
+            const JsonValue* directional = GetMember(*lighting, "directional");
+            if (directional && directional->type == JsonValue::Object) {
+                LevelLightConfig light;
+                light.id = "sun";
+                light.type = LightType::Directional;
+                light.enabled = BoolMember(*directional, "enabled", light.enabled);
+                light.position = Vector3Member(*directional, "position", light.position);
+                Vector3 fallbackDirection = Vector3Member(*directional, "target", Vector3{-0.4f, -1.0f, -0.3f});
+                light.rotation = QuaternionFromEulerDegrees(DirectionToEulerDegrees(fallbackDirection));
+                light.color = ColorMember(*directional, "color", light.color);
+                light.intensity = NumberMember(*directional, "intensity", light.intensity);
+                light.castShadows = BoolMember(*directional, "castShadows", light.castShadows);
+                config.lighting.lights.clear();
+                config.lighting.lights.push_back(light);
+            }
+        }
+    }
+    EnsureDefaultSun(config.lighting);
+
     const JsonValue* characters = GetMember(root, "characters");
     if (characters && characters->type == JsonValue::Array) {
         for (std::size_t i = 0; i < characters->arrayValue.size(); ++i) {
@@ -228,10 +310,11 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     }
 
     TraceLog(LOG_INFO,
-        "Level config: loaded %s skybox=%s fog=%s characters=%zu",
+        "Level config: loaded %s skybox=%s fog=%s lights=%zu characters=%zu",
         configPath.c_str(),
         config.skyboxPath.empty() ? "(none)" : config.skyboxPath.c_str(),
         config.fog.enabled ? "on" : "off",
+        config.lighting.lights.size(),
         config.characters.size());
     return config;
 }
@@ -257,6 +340,25 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
     file << "    \"end\": " << config.fog.end << ",\n";
     file << "    \"density\": " << config.fog.density << ",\n";
     file << "    \"mode\": \"" << FogModeToString(config.fog.mode) << "\"\n";
+    file << "  },\n";
+    file << "  \"lighting\": {\n";
+    file << "    \"ambient\": [" << static_cast<int>(config.lighting.ambient.r) << ", " << static_cast<int>(config.lighting.ambient.g) << ", " << static_cast<int>(config.lighting.ambient.b) << "],\n";
+    file << "    \"lights\": [\n";
+    for (std::size_t i = 0; i < config.lighting.lights.size(); ++i) {
+        const LevelLightConfig& light = config.lighting.lights[i];
+        Vector3 rotationDegrees = EulerDegreesFromQuaternion(light.rotation);
+        file << "      {\n";
+        file << "        \"id\": \"" << light.id << "\",\n";
+        file << "        \"type\": \"" << LightTypeToString(light.type) << "\",\n";
+        file << "        \"enabled\": " << (light.enabled ? "true" : "false") << ",\n";
+        file << "        \"position\": [" << light.position.x << ", " << light.position.y << ", " << light.position.z << "],\n";
+        file << "        \"rotation\": [" << rotationDegrees.x << ", " << rotationDegrees.y << ", " << rotationDegrees.z << "],\n";
+        file << "        \"color\": [" << static_cast<int>(light.color.r) << ", " << static_cast<int>(light.color.g) << ", " << static_cast<int>(light.color.b) << "],\n";
+        file << "        \"intensity\": " << light.intensity << ",\n";
+        file << "        \"castShadows\": " << (light.castShadows ? "true" : "false") << "\n";
+        file << "      }" << (i + 1 < config.lighting.lights.size() ? "," : "") << "\n";
+    }
+    file << "    ]\n";
     file << "  },\n";
     file << "  \"characters\": [\n";
     for (std::size_t i = 0; i < config.characters.size(); ++i) {

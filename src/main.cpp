@@ -1157,6 +1157,23 @@ int CharacterPartSelectionId(int characterIndex, int kind, int partIndex) {
     return -200000 - characterIndex * 10000 - kind * 1000 - partIndex;
 }
 
+int LightSelectionId(int index) {
+    return -300000 - index;
+}
+
+int LightIndexFromSelection(int selection) {
+    return -300000 - selection;
+}
+
+const char* LightTypeName(LightType type) {
+    switch (type) {
+        case LightType::Directional: return "Directional";
+        case LightType::Point: return "Point";
+        case LightType::Spot: return "Spot";
+    }
+    return "Directional";
+}
+
 bool DecodeCharacterPartSelection(int selection, int& characterIndex, int& kind, int& partIndex) {
     if (selection > -200000) return false;
     int value = -200000 - selection;
@@ -1195,6 +1212,15 @@ bool GetSelectedTransform(GameWorld& gameWorld, Vector3& position, Quaternion& r
         saveToLevelConfig = true;
         return true;
     }
+    if (gameWorld.debugUi.selectedLevelNode <= -300000) {
+        int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (lightIndex < 0 || lightIndex >= static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size())) return false;
+        const LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[lightIndex];
+        position = light.position;
+        rotation = light.rotation;
+        saveToLevelConfig = true;
+        return true;
+    }
     if (gameWorld.debugUi.selectedLevelNode >= 0 && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.level.debugNodes.size())) {
         const LevelDebugNode& node = gameWorld.level.debugNodes[gameWorld.debugUi.selectedLevelNode];
         position = node.position;
@@ -1213,6 +1239,14 @@ void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rot
         int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
         if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
             ApplyCharacterRootTransform(gameWorld.interactions.characters[characterIndex], position, rotation);
+            gameWorld.debugUi.levelConfigDirty = true;
+        }
+    } else if (gameWorld.debugUi.selectedLevelNode <= -300000) {
+        int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (lightIndex >= 0 && lightIndex < static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size())) {
+            LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[lightIndex];
+            light.position = position;
+            light.rotation = rotation;
             gameWorld.debugUi.levelConfigDirty = true;
         }
     } else if (gameWorld.debugUi.selectedLevelNode >= 0 && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.level.debugNodes.size())) {
@@ -1454,6 +1488,21 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             }
             rootY += 28.0f;
         }
+        for (std::size_t l = 0; l < gameWorld.currentLevelRuntimeConfig.lighting.lights.size(); ++l) {
+            const LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[l];
+            Rectangle row = Rectangle{x + 12.0f, rootY, width - 24.0f, 24.0f};
+            int selectionId = LightSelectionId(static_cast<int>(l));
+            selected = gameWorld.debugUi.selectedLevelNode == selectionId;
+            hovered = CheckCollisionPointRec(GetMousePosition(), row);
+            DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
+            DrawText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)), static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
+            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                gameWorld.debugUi.selectedLevelNode = selectionId;
+                SetVectorInput(gameWorld.debugUi.levelPositionInput, light.position);
+                SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(light.rotation));
+            }
+            rootY += 28.0f;
+        }
     }
 
     int matchingCount = 0;
@@ -1539,8 +1588,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
     DrawText(TextFormat("%d items", matchingCount), static_cast<int>(x + 14.0f), static_cast<int>(listY + visibleRows * rowH + 4.0f), 14, GRAY);
 
     float editY = listY + visibleRows * rowH + 24.0f;
-    if (gameWorld.debugUi.selectedLevelNode == -2 || gameWorld.debugUi.selectedLevelNode <= -1000) {
-        bool editingCharacter = gameWorld.debugUi.selectedLevelNode <= -1000;
+    if (gameWorld.debugUi.selectedLevelNode == -2 || (gameWorld.debugUi.selectedLevelNode <= -1000 && gameWorld.debugUi.selectedLevelNode > -200000)) {
+        bool editingCharacter = gameWorld.debugUi.selectedLevelNode <= -1000 && gameWorld.debugUi.selectedLevelNode > -200000;
         DrawText(editingCharacter ? "CHARACTER ROOT" : "LEVEL ROOT", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
         DrawText("Move/rotate GLB inteiro. Scale fica para depois.", static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE); editY += 26.0f;
 
@@ -1618,6 +1667,70 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 } else {
                     DrawText("Sem dados nesta aba para CHAR.", static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, GRAY);
                 }
+            }
+        }
+    }
+
+    if (gameWorld.debugUi.selectedLevelNode <= -300000) {
+        int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (lightIndex >= 0 && lightIndex < static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size())) {
+            LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[lightIndex];
+            DrawText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)), static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
+            DrawText("Directional usa rotation: forward local -Z.", static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE); editY += 26.0f;
+
+            bool changed = false;
+            if (DebugButton(Rectangle{x + 14.0f, editY, 120.0f, 24.0f}, light.enabled ? "Enabled ON" : "Enabled OFF")) {
+                light.enabled = !light.enabled;
+                changed = true;
+            }
+            if (DebugButton(Rectangle{x + 144.0f, editY, 120.0f, 24.0f}, light.castShadows ? "Shadows ON" : "Shadows OFF")) {
+                light.castShadows = !light.castShadows;
+                changed = true;
+            }
+            editY += 34.0f;
+
+            DrawText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+            changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelPositionInput[0], 501, gameWorld.debugUi) || changed;
+            changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelPositionInput[1], 502, gameWorld.debugUi) || changed;
+            changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelPositionInput[2], 503, gameWorld.debugUi) || changed;
+            editY += 34.0f;
+
+            DrawText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+            changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelRotationInput[0], 504, gameWorld.debugUi) || changed;
+            changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 505, gameWorld.debugUi) || changed;
+            changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 506, gameWorld.debugUi) || changed;
+            editY += 34.0f;
+
+            if (DebugButton(Rectangle{x + 14.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 1 ? "Move ON" : "Move")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 1 ? 0 : 1;
+            if (DebugButton(Rectangle{x + 120.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 2 ? "Rotate ON" : "Rotate")) gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 2 ? 0 : 2;
+            editY += 34.0f;
+
+            float red = static_cast<float>(light.color.r);
+            float green = static_cast<float>(light.color.g);
+            float blue = static_cast<float>(light.color.b);
+            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Red", red, 0.0f, 255.0f) || changed; editY += 28.0f;
+            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Green", green, 0.0f, 255.0f) || changed; editY += 28.0f;
+            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Blue", blue, 0.0f, 255.0f) || changed; editY += 28.0f;
+            changed = DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Intensity", light.intensity, 0.0f, 4.0f) || changed; editY += 34.0f;
+            light.color = Color{static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f)), static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f)), static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f)), 255};
+
+            if (changed) {
+                gameWorld.debugUi.levelConfigDirty = true;
+                Vector3 position = Vector3Zero();
+                Vector3 rotationDegrees = Vector3Zero();
+                if (ParseVectorInput(gameWorld.debugUi.levelPositionInput, position) && ParseVectorInput(gameWorld.debugUi.levelRotationInput, rotationDegrees)) {
+                    light.position = position;
+                    light.rotation = QuaternionFromEulerDegrees(rotationDegrees);
+                }
+            }
+            if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, "Teleport to Camera")) {
+                light.position = gameWorld.camera.position;
+                SetVectorInput(gameWorld.debugUi.levelPositionInput, light.position);
+                gameWorld.debugUi.levelConfigDirty = true;
+            }
+            editY += 34.0f;
+            if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, gameWorld.debugUi.levelConfigDirty ? "Save level config *" : "Save level config")) {
+                SaveCurrentLevelRuntimeConfig(gameWorld);
             }
         }
     }
@@ -1833,6 +1946,7 @@ void DrawGameplay(GameWorld& gameWorld) {
     BeginMode3D(gameWorld.camera);
     DrawLevelSkybox(gameWorld.level, gameWorld.camera);
     UpdateFogShader(gameWorld.fogShader, gameWorld.currentLevelRuntimeConfig.fog, gameWorld.camera);
+    UpdateLightingShader(gameWorld.fogShader, gameWorld.currentLevelRuntimeConfig.lighting);
     DrawLevel(gameWorld.level);
     DrawInteractableCharacters(gameWorld.interactions);
     if (gameWorld.debugUi.showForces) {
@@ -1842,6 +1956,15 @@ void DrawGameplay(GameWorld& gameWorld) {
         DrawSphere(feetPosition, 0.05f, gameWorld.person.grounded ? GREEN : RED);
     }
     if (gameWorld.debugUi.levelSidebarOpen) {
+        for (std::size_t i = 0; i < gameWorld.currentLevelRuntimeConfig.lighting.lights.size(); ++i) {
+            const LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[i];
+            if (!light.enabled) continue;
+            Color color = light.color;
+            if (gameWorld.debugUi.selectedLevelNode == LightSelectionId(static_cast<int>(i))) color = YELLOW;
+            Vector3 direction = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, light.rotation));
+            DrawSphere(light.position, 0.18f, color);
+            DrawLine3D(light.position, Vector3Add(light.position, Vector3Scale(direction, 2.5f)), color);
+        }
         if (gameWorld.debugUi.selectedLevelNode == -2) {
             Vector3 p = gameWorld.level.rootPosition;
             DrawLine3D(p, Vector3Add(p, Vector3{1.0f, 0.0f, 0.0f}), RED);
@@ -1851,6 +1974,13 @@ void DrawGameplay(GameWorld& gameWorld) {
             int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
             if (characterIndex >= 0 && characterIndex < static_cast<int>(gameWorld.interactions.characters.size())) {
                 DrawCharacterDebugSelection(gameWorld.interactions.characters[characterIndex]);
+            }
+        } else if (gameWorld.debugUi.selectedLevelNode <= -300000) {
+            int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+            if (lightIndex >= 0 && lightIndex < static_cast<int>(gameWorld.currentLevelRuntimeConfig.lighting.lights.size())) {
+                const LevelLightConfig& light = gameWorld.currentLevelRuntimeConfig.lighting.lights[lightIndex];
+                Vector3 direction = Vector3Normalize(Vector3RotateByQuaternion(Vector3{0.0f, 0.0f, -1.0f}, light.rotation));
+                DrawLine3D(light.position, Vector3Add(light.position, Vector3Scale(direction, 3.5f)), YELLOW);
             }
         } else if (gameWorld.debugUi.selectedLevelNode <= -200000) {
             int characterIndex = 0;
