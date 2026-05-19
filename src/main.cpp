@@ -977,6 +977,7 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
         if (gameWorld.debugUi.freeCameraActive) {
             UpdateDebugCamera(gameWorld.debugCamera, gameWorld.camera);
         }
+        gameWorld.physicsAccumulator = 0.0f;
         return;
     }
 

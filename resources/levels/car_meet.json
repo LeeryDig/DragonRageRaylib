@@ -60,12 +60,25 @@
         "type": "point",
         "enabled": true,
         "position": [4.630, 2.609, 0.108],
-        "rotation": [158.363, -17.449, -180.000],
+        "rotation": [158.363, -17.449, 180.000],
         "color": [255, 220, 170],
         "intensity": 1.000,
         "range": 4.288,
         "innerCone": 18.000,
         "outerCone": 32.000,
+        "castShadows": false
+      },
+      {
+        "id": "spot_05",
+        "type": "spot",
+        "enabled": true,
+        "position": [-8.587, 1.325, -8.609],
+        "rotation": [128.679, -44.296, -163.161],
+        "color": [255, 18, 170],
+        "intensity": 0.956,
+        "range": 48.492,
+        "innerCone": 17.575,
+        "outerCone": 47.467,
         "castShadows": false
       }
     ]
