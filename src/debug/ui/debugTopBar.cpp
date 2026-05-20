@@ -70,7 +70,7 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         }
         if (DebugMenuItem(Rectangle{dx, 98, 190, 30}, "Teleport...")) {
             gameWorld.debugUi.gameTeleportOpen = true;
-            SetVectorInput(gameWorld.debugUi.gameTeleportInput, gameWorld.person.position);
+            SetVectorInput(gameWorld.debugUi.gameTeleportInput, gameWorld.player.state.position);
             gameWorld.debugUi.activeMenu = -1;
         }
     } else if (gameWorld.debugUi.activeMenu == 1) {
@@ -88,12 +88,12 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
             gameWorld.debugUi.showForces = !gameWorld.debugUi.showForces;
         }
-        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Person Status", true, gameWorld.debugUi.showVehicleStatus)) {
-            gameWorld.debugUi.showVehicleStatus = !gameWorld.debugUi.showVehicleStatus;
+        if (DebugMenuItem(Rectangle{dx, 68, 220, 30}, "Show Person Status", true, gameWorld.debugUi.showPersonStatus)) {
+            gameWorld.debugUi.showPersonStatus = !gameWorld.debugUi.showPersonStatus;
         }
         if (DebugMenuItem(Rectangle{dx, 98, 220, 30}, "Camera Teleport...")) {
             gameWorld.debugUi.debugTeleportOpen = true;
-            SetVectorInput(gameWorld.debugUi.debugTeleportInput, gameWorld.camera.position);
+            SetVectorInput(gameWorld.debugUi.debugTeleportInput, gameWorld.render.camera.position);
             gameWorld.debugUi.activeMenu = -1;
         }
     } else if (gameWorld.debugUi.activeMenu == 4) {
@@ -106,7 +106,7 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         }
     }
 
-    DrawText(TextFormat("Cam %.2f %.2f %.2f", gameWorld.camera.position.x, gameWorld.camera.position.y, gameWorld.camera.position.z), GetScreenWidth() - 610, 9, 16, LIGHTGRAY);
+    DrawText(TextFormat("Cam %.2f %.2f %.2f", gameWorld.render.camera.position.x, gameWorld.render.camera.position.y, gameWorld.render.camera.position.z), GetScreenWidth() - 610, 9, 16, LIGHTGRAY);
     DrawText("F1 close menu | Hold RMB + WASD/Q/Z to fly", GetScreenWidth() - 420, 9, 16, LIGHTGRAY);
 }
 

@@ -47,31 +47,7 @@ struct CharacterSpawnConfig {
     Vector3 rotationDegrees;
 };
 
-struct InteractionSystem {
-    std::vector<InteractableCharacter> characters;
-    int focusedIndex;
-    int activeDialogueIndex;
-    int selectedChoiceIndex;
-    bool dialogueOpen;
-};
-
-InteractionSystem LoadInteractionSystem(const std::vector<CharacterSpawnConfig>& characters);
-InteractionSystem LoadInteractionSystem(const std::string& configPath);
-void UnloadInteractionSystem(InteractionSystem& system);
-
-void UpdateInteractionFocus(
-    InteractionSystem& system,
-    const Camera& camera,
-    Vector3 playerPosition,
-    float interactionDistance,
-    float rayLength);
-
-void BeginFocusedDialogue(InteractionSystem& system);
-void UpdateDialogueInput(InteractionSystem& system);
-void ResolveCharacterCollisions(InteractionSystem& system, Vector3& playerPosition, float playerRadius);
-
-void DrawInteractableCharacters(const InteractionSystem& system);
-void DrawInteractionUi(const InteractionSystem& system);
+bool LoadInteractableCharacter(const std::string& configPath, InteractableCharacter& character);
 void ApplyCharacterRootTransform(InteractableCharacter& character, Vector3 position, Quaternion rotation);
 void DrawCharacterDebugSelection(const InteractableCharacter& character);
 

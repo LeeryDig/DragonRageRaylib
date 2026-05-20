@@ -9,37 +9,26 @@
 
 #include "debug/cameraDebug.hpp"
 #include "debug/debugIcons.hpp"
+#include "entity/entityRegistry.hpp"
 #include "gameState.hpp"
-#include "interactionSystem.hpp"
+#include "input/inputMap.hpp"
 #include "level/levelData.hpp"
 #include "level/levelsConfig.hpp"
 #include "level/levelRuntimeConfig.hpp"
 #include "personController.hpp"
-#include "physics/physicsWorld.hpp"
-#include "render/fogRenderer.hpp"
 #include "physics/jolt/joltWorld.hpp"
-#include "physics/shapes/boxShape.hpp"
+#include "render/fogRenderer.hpp"
 #include "staticWorld.hpp"
-#include "vehiclePhysics.hpp"
-
-struct CarVisual {
-    Model model;
-    Texture2D texture;
-    Vector3 scale;
-};
 
 struct DebugUiState {
     bool enabled;
     bool freeCameraActive;
     bool showForces;
-    bool showVehicleStatus;
-    bool showVehiclePanel;
+    bool showPersonStatus;
     bool showPhysicsPanel;
-    bool pinVehicleStatus;
-    bool pinVehiclePanel;
+    bool pinPersonStatus;
     bool pinPhysicsPanel;
-    Vector2 vehicleStatusPos;
-    Vector2 vehiclePanelPos;
+    Vector2 personStatusPos;
     Vector2 physicsPanelPos;
     bool debugTeleportOpen;
     bool gameTeleportOpen;
@@ -72,36 +61,42 @@ struct DebugUiState {
     Vector2 dragOffset;
 };
 
-struct GameWorld {
-    StaticWorld world;
+// ─── Subsystems ───────────────────────────────────────────────────────────────
+
+struct WorldContext {
+    StaticWorld statics;
     LevelsConfig levelsConfig;
     LevelData level;
     int currentLevelConfigIndex;
     std::string currentLevelPath;
     std::string currentLevelConfigPath;
-    LevelRuntimeConfig currentLevelRuntimeConfig;
+    LevelRuntimeConfig runtimeConfig;
+};
+
+struct PlayerContext {
+    PersonConfig config;
+    PersonState state;
+    InputMap input;
+    std::unique_ptr<physics_jolt::JoltWorld> physics;
+    float physicsAccumulator;
+};
+
+struct RenderContext {
     FogShader fogShader;
     DebugIcons debugIcons;
-    PersonConfig personConfig;
-    PersonState person;
-    InteractionSystem interactions;
-    VehicleConfig vehicleConfig;
-    VehicleState vehicle;
-    physics::PhysicsWorld physicsWorld;
-    std::unique_ptr<physics_jolt::JoltWorld> joltWorld;
-    physics::RigidBody* vehicleBody;
-    std::vector<physics::StaticBody*> levelBodies;
-    std::vector<std::shared_ptr<const physics::Shape> > levelShapes;
-    std::shared_ptr<const physics::BoxShape> vehicleShape;
-    CarVisual visual;
     Camera camera;
     ChaseCameraConfig chaseCamera;
     DebugCameraState debugCamera;
+};
+
+// ─── GameWorld ────────────────────────────────────────────────────────────────
+
+struct GameWorld {
+    WorldContext world;
+    PlayerContext player;
+    EntityRegistry npcs;
+    RenderContext render;
     DebugUiState debugUi;
-    float physicsAccumulator;
-    float logElapsedSeconds;
-    unsigned int logFrameIndex;
-    std::vector<std::string> vehicleLogLines;
 };
 
 #endif

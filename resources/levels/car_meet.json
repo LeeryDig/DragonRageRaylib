@@ -60,7 +60,7 @@
         "type": "point",
         "enabled": true,
         "position": [4.630, 2.609, 0.108],
-        "rotation": [158.363, -17.449, 180.000],
+        "rotation": [158.363, -17.449, -180.000],
         "color": [255, 220, 170],
         "intensity": 1.000,
         "range": 4.288,

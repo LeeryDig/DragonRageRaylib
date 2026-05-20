@@ -7,6 +7,8 @@
 
 #include "raymath.h"
 
+#include "input/inputMap.hpp"
+
 namespace {
 
 std::string ExtractArrayBlock(const std::string& json, const std::string& key) {
@@ -163,16 +165,14 @@ void ResetPersonState(PersonState& state, const PersonConfig& config, Vector3 po
     state.cameraPitch = 15.0f * DEG2RAD;
 }
 
-PersonInput ReadPersonInput(bool controlsEnabled) {
+PersonInput ReadPersonInput(const InputMap& inputMap, bool controlsEnabled) {
     PersonInput input = {0.0f, 0.0f};
-    if (!controlsEnabled) {
-        return input;
-    }
+    if (!controlsEnabled) return input;
 
-    if (IsKeyDown(KEY_A)) input.moveX -= 1.0f;
-    if (IsKeyDown(KEY_D)) input.moveX += 1.0f;
-    if (IsKeyDown(KEY_W)) input.moveZ += 1.0f;
-    if (IsKeyDown(KEY_S)) input.moveZ -= 1.0f;
+    if (IsActionDown(inputMap, GameAction::MoveLeft))    input.moveX -= 1.0f;
+    if (IsActionDown(inputMap, GameAction::MoveRight))   input.moveX += 1.0f;
+    if (IsActionDown(inputMap, GameAction::MoveForward)) input.moveZ += 1.0f;
+    if (IsActionDown(inputMap, GameAction::MoveBack))    input.moveZ -= 1.0f;
 
     Vector2 move = Vector2{input.moveX, input.moveZ};
     if (Vector2LengthSqr(move) > 1.0f) {

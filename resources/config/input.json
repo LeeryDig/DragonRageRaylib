@@ -1,0 +1,8 @@
+{
+  "move_forward": "W",
+  "move_back": "S",
+  "move_left": "A",
+  "move_right": "D",
+  "interact": "E",
+  "open_menu": "ESCAPE"
+}

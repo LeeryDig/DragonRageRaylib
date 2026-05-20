@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmake --build build/macos-debug --target DragonRage)",
+      "Bash(cmake *)"
+    ]
+  }
+}

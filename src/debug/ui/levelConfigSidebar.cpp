@@ -80,7 +80,7 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
 
     float y = 116.0f;
     if (gameWorld.debugUi.levelConfigTab == 0) {
-        std::string configLabel = gameWorld.currentLevelConfigPath.empty() ? "No .json for current level" : FileNameFromPath(gameWorld.currentLevelConfigPath);
+        std::string configLabel = gameWorld.world.currentLevelConfigPath.empty() ? "No .json for current level" : FileNameFromPath(gameWorld.world.currentLevelConfigPath);
         DrawText(configLabel.c_str(), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
         y += 28.0f;
 
@@ -102,27 +102,27 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
             int skyboxIndex = gameWorld.debugUi.levelConfigScroll + i;
             const std::string& path = skyboxes[static_cast<std::size_t>(skyboxIndex)];
             Rectangle row = Rectangle{x + 12.0f, y + i * rowH, width - 24.0f, rowH - 4.0f};
-            bool current = path == gameWorld.currentLevelRuntimeConfig.skyboxPath;
+            bool current = path == gameWorld.world.runtimeConfig.skyboxPath;
             bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
             DrawRectangleRec(row, current ? Color{80, 100, 80, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
             DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
             std::string label = FileNameFromPath(path);
             DrawText(label.c_str(), static_cast<int>(row.x + 8.0f), static_cast<int>(row.y + 10.0f), 14, RAYWHITE);
-            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !current && !gameWorld.currentLevelConfigPath.empty()) {
-                gameWorld.currentLevelRuntimeConfig.skyboxPath = path;
+            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !current && !gameWorld.world.currentLevelConfigPath.empty()) {
+                gameWorld.world.runtimeConfig.skyboxPath = path;
                 if (actions.saveCurrentLevelRuntimeConfig) actions.saveCurrentLevelRuntimeConfig(gameWorld);
                 if (actions.reloadCurrentLevelForConfig) actions.reloadCurrentLevelForConfig(gameWorld);
             }
         }
 
         float bottomY = y + visibleRows * rowH + 12.0f;
-        std::string currentLabel = gameWorld.currentLevelRuntimeConfig.skyboxPath.empty() ? "(none)" : FileNameFromPath(gameWorld.currentLevelRuntimeConfig.skyboxPath);
+        std::string currentLabel = gameWorld.world.runtimeConfig.skyboxPath.empty() ? "(none)" : FileNameFromPath(gameWorld.world.runtimeConfig.skyboxPath);
         DrawText(TextFormat("Current: %s", currentLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(bottomY), 14, LIGHTGRAY);
         return;
     }
 
     if (gameWorld.debugUi.levelConfigTab == 1) {
-        FogConfig& fog = gameWorld.currentLevelRuntimeConfig.fog;
+        FogConfig& fog = gameWorld.world.runtimeConfig.fog;
         DrawText("Simple linear distance fog. Skybox stays clean.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
         y += 32.0f;
 
@@ -175,7 +175,7 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
     }
 
     if (gameWorld.debugUi.levelConfigTab == 2) {
-        Color& ambient = gameWorld.currentLevelRuntimeConfig.lighting.ambient;
+        Color& ambient = gameWorld.world.runtimeConfig.lighting.ambient;
         DrawText("Ambient light per level. Realtime, save writes JSON.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
         y += 34.0f;
         y += 44.0f;
@@ -203,27 +203,27 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         y += 46.0f;
         DrawText("Shadow config saved only; renderer pass pending.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, ORANGE);
         y += 26.0f;
-        if (DebugButton(Rectangle{x + 14.0f, y, 150.0f, 28.0f}, gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled ? "Shadows ON" : "Shadows OFF")) {
-            gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled = !gameWorld.currentLevelRuntimeConfig.lighting.shadowsEnabled;
+        if (DebugButton(Rectangle{x + 14.0f, y, 150.0f, 28.0f}, gameWorld.world.runtimeConfig.lighting.shadowsEnabled ? "Shadows ON" : "Shadows OFF")) {
+            gameWorld.world.runtimeConfig.lighting.shadowsEnabled = !gameWorld.world.runtimeConfig.lighting.shadowsEnabled;
             gameWorld.debugUi.levelConfigDirty = true;
         }
         y += 40.0f;
-        float bias = gameWorld.currentLevelRuntimeConfig.lighting.shadowBias;
+        float bias = gameWorld.world.runtimeConfig.lighting.shadowBias;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Bias", bias, 0.0f, 0.05f)) {
-            gameWorld.currentLevelRuntimeConfig.lighting.shadowBias = bias;
+            gameWorld.world.runtimeConfig.lighting.shadowBias = bias;
             gameWorld.debugUi.levelConfigDirty = true;
         }
         y += 32.0f;
-        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Strength", gameWorld.currentLevelRuntimeConfig.lighting.shadowStrength, 0.0f, 1.0f)) gameWorld.debugUi.levelConfigDirty = true;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Strength", gameWorld.world.runtimeConfig.lighting.shadowStrength, 0.0f, 1.0f)) gameWorld.debugUi.levelConfigDirty = true;
         y += 32.0f;
-        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Area", gameWorld.currentLevelRuntimeConfig.lighting.shadowAreaSize, 5.0f, 120.0f)) gameWorld.debugUi.levelConfigDirty = true;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Area", gameWorld.world.runtimeConfig.lighting.shadowAreaSize, 5.0f, 120.0f)) gameWorld.debugUi.levelConfigDirty = true;
         return;
     }
 
     DrawText("Ordem da lista define level inicial no boot.", static_cast<int>(x + 14.0f), static_cast<int>(y), 14, GRAY);
     y += 28.0f;
     float rowH = 46.0f;
-    int count = static_cast<int>(gameWorld.levelsConfig.levels.size());
+    int count = static_cast<int>(gameWorld.world.levelsConfig.levels.size());
     if (count == 0) {
         DrawText("No levels in levels.json", static_cast<int>(x + 14.0f), static_cast<int>(y), 16, ORANGE);
         return;
@@ -237,10 +237,10 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
     gameWorld.debugUi.levelLoadScroll = Clamp(gameWorld.debugUi.levelLoadScroll, 0, std::max(0, count - visibleRows));
     for (int i = 0; i < visibleRows; ++i) {
         int levelIndex = gameWorld.debugUi.levelLoadScroll + i;
-        const LevelConfigEntry& entry = gameWorld.levelsConfig.levels[static_cast<std::size_t>(levelIndex)];
+        const LevelConfigEntry& entry = gameWorld.world.levelsConfig.levels[static_cast<std::size_t>(levelIndex)];
         Rectangle row = Rectangle{x + 12.0f, y + i * rowH, width - 24.0f, rowH - 4.0f};
         bool selected = gameWorld.debugUi.selectedLevelConfigIndex == levelIndex;
-        bool current = gameWorld.currentLevelConfigIndex == levelIndex;
+        bool current = gameWorld.world.currentLevelConfigIndex == levelIndex;
         bool hovered = CheckCollisionPointRec(GetMousePosition(), row);
         DrawRectangleRec(row, selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
         DrawRectangleLinesEx(row, 1.0f, current ? GREEN : Color{72, 72, 80, 255});
@@ -254,7 +254,7 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
 
     float actionY = y + visibleRows * rowH + 34.0f;
     int selectedIndex = gameWorld.debugUi.selectedLevelConfigIndex;
-    const LevelConfigEntry* selectedEntry = GetLevelConfigEntry(gameWorld.levelsConfig, selectedIndex);
+    const LevelConfigEntry* selectedEntry = GetLevelConfigEntry(gameWorld.world.levelsConfig, selectedIndex);
     if (selectedEntry != nullptr) {
         std::string selectedLabel = LevelEntryLabel(*selectedEntry);
         DrawText(TextFormat("Selected: %s", selectedLabel.c_str()), static_cast<int>(x + 14.0f), static_cast<int>(actionY), 16, YELLOW);

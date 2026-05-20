@@ -5,6 +5,8 @@
 
 #include "raylib.h"
 
+#include "input/inputMap.hpp"
+
 struct PersonConfig {
     float fixedTimeStep;
     float walkSpeed;
@@ -48,7 +50,7 @@ PersonState CreatePersonState(const PersonConfig& config);
 
 void ResetPersonState(PersonState& state, const PersonConfig& config, Vector3 position, float yawRadians = 0.0f);
 
-PersonInput ReadPersonInput(bool controlsEnabled);
+PersonInput ReadPersonInput(const InputMap& inputMap, bool controlsEnabled);
 
 Vector3 GetPersonCameraForward(const PersonState& state);
 Vector3 GetPersonCameraRight(const PersonState& state);
