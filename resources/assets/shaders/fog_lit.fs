@@ -67,8 +67,8 @@ void main()
         vec3 toLight = pointLightPosition[i] - fragWorldPosition;
         float dist = length(toLight);
         float range = max(pointLightRange[i], 0.001);
-        float attenuation = clamp(1.0 - dist/range, 0.0, 1.0);
-        attenuation = floor(attenuation*8.0)/8.0;
+        float t = clamp(1.0 - dist/range, 0.0, 1.0);
+        float attenuation = floor(t*t*16.0)/16.0;
         vec3 lightDir = normalize(toLight);
         float ndotl = max(dot(normal, lightDir), 0.0);
         ndotl = floor(ndotl*8.0)/8.0;
@@ -89,8 +89,8 @@ void main()
         float outerCone = cos(radians(spotLightOuterCone[i]));
         float cone = clamp((coneDot - outerCone)/max(innerCone - outerCone, 0.001), 0.0, 1.0);
         cone = floor(cone*8.0)/8.0;
-        float attenuation = clamp(1.0 - dist/range, 0.0, 1.0);
-        attenuation = floor(attenuation*8.0)/8.0;
+        float t = clamp(1.0 - dist/range, 0.0, 1.0);
+        float attenuation = floor(t*t*16.0)/16.0;
         float ndotl = max(dot(normal, lightDir), 0.0);
         ndotl = floor(ndotl*8.0)/8.0;
         litColor += spotLightColor[i]*spotLightIntensity[i]*ndotl*attenuation*cone;
@@ -103,7 +103,7 @@ void main()
         float distanceToCamera = distance(fragWorldPosition, cameraPosition);
         float fogFactor = clamp((fogEnd - distanceToCamera)/max(fogEnd - fogStart, 0.001), 0.0, 1.0);
         fogFactor = pow(fogFactor, fogDensity);
-        fogFactor = floor(fogFactor*32.0)/32.0;
+        fogFactor = floor(fogFactor*64.0)/64.0;
         texelColor.rgb = mix(fogColor, texelColor.rgb, fogFactor);
     }
 

@@ -1,5 +1,5 @@
 {
-  "skybox": "resources/assets/skybox/Cubemap_Sky_12-512x512.png",
+  "skybox": "resources/assets/skybox/Cubemap_Sky_15-512x512.png",
   "fog": {
     "enabled": true,
     "color": [29, 31, 31],
@@ -30,39 +30,13 @@
         "castShadows": false
       },
       {
-        "id": "point_02",
-        "type": "point",
-        "enabled": true,
-        "position": [-5.044, 2.051, 1.223],
-        "rotation": [162.247, 19.296, 165.955],
-        "color": [4, 244, 175],
-        "intensity": 1.118,
-        "range": 6.481,
-        "innerCone": 18.000,
-        "outerCone": 32.000,
-        "castShadows": true
-      },
-      {
-        "id": "spot_03",
-        "type": "spot",
-        "enabled": true,
-        "position": [-0.051, 4.847, 3.887],
-        "rotation": [-14.031, 51.650, 74.324],
-        "color": [255, 220, 170],
-        "intensity": 1.000,
-        "range": 10.000,
-        "innerCone": 18.000,
-        "outerCone": 32.000,
-        "castShadows": false
-      },
-      {
         "id": "point_04",
         "type": "point",
         "enabled": true,
-        "position": [4.630, 2.609, 0.108],
+        "position": [4.630, 1.570, 0.108],
         "rotation": [158.363, -17.449, -180.000],
         "color": [255, 220, 170],
-        "intensity": 1.000,
+        "intensity": 1.977,
         "range": 4.288,
         "innerCone": 18.000,
         "outerCone": 32.000,
@@ -72,13 +46,13 @@
         "id": "spot_05",
         "type": "spot",
         "enabled": true,
-        "position": [-8.587, 1.325, -8.609],
-        "rotation": [128.679, -44.296, -163.161],
+        "position": [-8.587, 4.548, -8.609],
+        "rotation": [137.144, -44.296, -163.161],
         "color": [255, 18, 170],
-        "intensity": 0.956,
-        "range": 48.492,
+        "intensity": 2.886,
+        "range": 9.315,
         "innerCone": 17.575,
-        "outerCone": 47.467,
+        "outerCone": 48.265,
         "castShadows": false
       }
     ]

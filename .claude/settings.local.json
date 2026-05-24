@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(cmake --build build/macos-debug --target DragonRage)",
-      "Bash(cmake *)"
+      "Bash(cmake *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

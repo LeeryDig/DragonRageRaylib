@@ -227,15 +227,12 @@ resources/levels/city_01/city_01.glb
 - [ ] A direção inicial do carro está correta.
 - [ ] O arquivo foi exportado como `.glb`.
 
-## MVP esperado
-
-Na primeira versão da pipeline, a fase deve suportar:
+## Sistema suporta
 
 - visual carregado via `.glb`;
 - spawn vindo do objeto `SPAWN_PLAYER`;
-- colliders box Jolt vindos de `COL_BOX_*`, `COL_WALL_*`, `COL_OBSTACLE_*`;
-- static mesh colliders Jolt vindos de `COL_ROAD_*`, `COL_RAMP_*`, `COL_SURFACE_*`, `COL_MESH_*`;
-- player andando com capsule character controller do Jolt;
+- colliders box vindos de `COL_BOX_*`, `COL_WALL_*`, `COL_OBSTACLE_*`;
+- mesh colliders estáticos por triângulos vindos de `COL_ROAD_*`, `COL_RAMP_*`, `COL_SURFACE_*`, `COL_MESH_*`;
 - debug draw: colliders físicos em verde, triggers em roxo;
 - checkpoints vindos de objetos `CHECKPOINT_###`;
 - finish line vinda de `FINISH_LINE`.

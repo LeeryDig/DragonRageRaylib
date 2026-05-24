@@ -2,12 +2,12 @@
   "levels": [
     {
       "name": "Encontro de carro",
-      "path": "resources/levels/car_meet.glb",
+      "path": "resources/models/levels/car_meet.glb",
       "config": "resources/levels/car_meet.json"
     },
     {
       "name": "Pista de teste",
-      "path": "resources/levels/levelteste.glb",
+      "path": "resources/models/levels/levelteste.glb",
       "config": "resources/levels/levelteste.json"
     }
   ]
