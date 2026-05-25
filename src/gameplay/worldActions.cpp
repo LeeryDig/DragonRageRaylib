@@ -16,16 +16,18 @@
 #include "level/levelLoader.hpp"
 #include "level/levelRuntimeConfig.hpp"
 #include "level/levelsConfig.hpp"
+#include "gameplay/smoking/smokingConfig.hpp"
 #include "personController.hpp"
 #include "physics/jolt/joltWorld.hpp"
 #include "render/fogRenderer.hpp"
 #include "staticWorld.hpp"
 #include "utils.hpp"
 
-static const char* CAMERA_CONFIG_PATH = "resources/config/camera.json";
-static const char* INPUT_CONFIG_PATH  = "resources/config/input.json";
-static const char* PERSON_CONFIG_PATH = "resources/config/person.json";
-static const char* LEVELS_CONFIG_PATH = "resources/config/levels.json";
+static const char* CAMERA_CONFIG_PATH  = "resources/config/camera.json";
+static const char* INPUT_CONFIG_PATH   = "resources/config/input.json";
+static const char* PERSON_CONFIG_PATH  = "resources/config/person.json";
+static const char* LEVELS_CONFIG_PATH  = "resources/config/levels.json";
+static const char* SMOKING_CONFIG_PATH = "resources/config/smoking.json";
 
 static Vector3 EulerDegreesFromQuaternion(Quaternion rotation) {
     Vector3 radians = QuaternionToEuler(rotation);
@@ -72,9 +74,11 @@ void ResetGameWorld(GameWorld& gameWorld) {
 }
 
 void RestartLevel(GameWorld& gameWorld) {
+    gameWorld.particles.Unload();
+    gameWorld.player.smoking.emitterHandle = -1;
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.runtimeConfig = LoadLevelRuntimeConfig(gameWorld.world.currentLevelConfigPath);
-    gameWorld.debugUi.levelConfigDirty = false;
+    gameWorld.debugUi.configDirty = false;
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     ApplyRuntimeRenderConfig(gameWorld);
@@ -91,12 +95,14 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
     const LevelConfigEntry* entry = GetLevelConfigEntry(gameWorld.world.levelsConfig, levelIndex);
     if (entry == nullptr) return;
 
+    gameWorld.particles.Unload();
+    gameWorld.player.smoking.emitterHandle = -1;
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.currentLevelConfigIndex = levelIndex;
     gameWorld.world.currentLevelPath = entry->path;
     gameWorld.world.currentLevelConfigPath = entry->configPath;
     gameWorld.world.runtimeConfig = LoadLevelRuntimeConfig(gameWorld.world.currentLevelConfigPath);
-    gameWorld.debugUi.levelConfigDirty = false;
+    gameWorld.debugUi.configDirty = false;
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     ApplyRuntimeRenderConfig(gameWorld);
@@ -149,8 +155,10 @@ void SaveCurrentLevelRuntimeConfig(GameWorld& gameWorld) {
     }
     if (SaveLevelRuntimeConfig(
             gameWorld.world.currentLevelConfigPath, gameWorld.world.runtimeConfig)) {
-        gameWorld.debugUi.levelConfigDirty = false;
+        gameWorld.debugUi.configDirty = false;
     }
+    SavePersonConfig(PERSON_CONFIG_PATH, gameWorld.player.config);
+    SaveSmokingConfig(SMOKING_CONFIG_PATH, gameWorld.player.smokingConfig);
 }
 
 void ReloadCurrentLevelForConfig(GameWorld& gameWorld) {
@@ -188,6 +196,8 @@ GameWorld LoadGameWorld() {
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
+    gameWorld.player.smokingConfig = LoadSmokingConfig(
+        Utils::ResolveProjectPath(SMOKING_CONFIG_PATH), DefaultSmokingConfig());
     gameWorld.player.state = CreatePersonState(gameWorld.player.config);
     gameWorld.player.input = LoadInputMap(
         Utils::ResolveProjectPath(INPUT_CONFIG_PATH), DefaultInputMap());
@@ -221,6 +231,7 @@ GameWorld LoadGameWorld() {
 
 void UnloadGameWorld(GameWorld& gameWorld) {
     EnableCursor();
+    gameWorld.particles.Unload();
     gameWorld.player.physics->Shutdown();
     DestroyEntityRegistry(gameWorld.npcs);
     UnloadLevel(gameWorld.world.level);

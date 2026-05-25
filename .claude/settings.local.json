@@ -4,7 +4,8 @@
       "Bash(cmake --build build/macos-debug --target DragonRage)",
       "Bash(cmake *)",
       "Bash(gh api *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(grep -E \"\\(error|warning:|FAILED|Linking|DragonRage$\\)\")"
     ]
   }
 }

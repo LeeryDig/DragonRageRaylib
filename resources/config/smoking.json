@@ -1,0 +1,28 @@
+{
+  "default_pack_size": 10,
+  "drain_idle": 0.005000,
+  "drain_puff": 0.050000,
+  "puff_duration_base": 1.500000,
+  "puff_duration_variance": 0.500000,
+  "emit_particles": true,
+  "particles": {
+    "max_particles": 20,
+    "spawn_rate": 8.000000,
+    "emit_duration": 2.000000,
+    "lifetime": 1.500000,
+    "start_size": 0.100000,
+    "end_size": 0.400000,
+    "start_alpha": 200.000000,
+    "end_alpha": 0.000000,
+    "vel_min_x": -0.300000,
+    "vel_min_y": 0.208492,
+    "vel_min_z": -0.300000,
+    "vel_max_x": 0.300000,
+    "vel_max_y": 0.616743,
+    "vel_max_z": 0.300000,
+    "drag": 0.500000,
+    "emit_offset_x": 0.000000,
+    "emit_offset_y": 1.500000,
+    "emit_offset_z": 0.318124
+  }
+}

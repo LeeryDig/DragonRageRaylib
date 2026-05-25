@@ -15,6 +15,9 @@
 #include "level/levelData.hpp"
 #include "level/levelsConfig.hpp"
 #include "level/levelRuntimeConfig.hpp"
+#include "gameplay/smoking/smokingConfig.hpp"
+#include "gameplay/smoking/smokingState.hpp"
+#include "particles/particleSystem.hpp"
 #include "personController.hpp"
 #include "physics/jolt/joltWorld.hpp"
 #include "render/fogRenderer.hpp"
@@ -50,7 +53,7 @@ struct DebugUiState {
     int transformGizmoAxis;
     bool draggingTransformGizmo;
     Vector2 transformGizmoLastMouse;
-    bool levelConfigDirty;
+    bool configDirty;
     int selectedLevelConfigIndex;
     int levelLoadScroll;
     int levelConfigScroll;
@@ -59,6 +62,13 @@ struct DebugUiState {
     int activeMenu;
     int draggingPanel;
     Vector2 dragOffset;
+    bool personPanelOpen;
+    int  personPanelTab;
+    int  personPanelScroll;
+    std::string activeTextFieldBuffer;
+    bool    smokingGizmoDragging  = false;
+    int     smokingGizmoAxis      = -1;
+    Vector2 smokingGizmoLastMouse = {};
 };
 
 // ─── Subsystems ───────────────────────────────────────────────────────────────
@@ -77,6 +87,8 @@ struct PlayerContext {
     PersonConfig config;
     PersonState state;
     InputMap input;
+    SmokingConfig smokingConfig;
+    SmokingState smoking;
     std::unique_ptr<physics_jolt::JoltWorld> physics;
     float physicsAccumulator;
 };
@@ -97,6 +109,7 @@ struct GameWorld {
     EntityRegistry npcs;
     RenderContext render;
     DebugUiState debugUi;
+    ParticleSystem particles;
 };
 
 #endif

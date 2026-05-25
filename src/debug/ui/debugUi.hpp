@@ -22,6 +22,7 @@ struct LevelConfigActions {
 
 void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions);
 void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& actions);
+void DrawPersonPanel(GameWorld& gameWorld);
 
 }  // namespace debug_ui
 

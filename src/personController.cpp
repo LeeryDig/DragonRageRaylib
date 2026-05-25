@@ -2,10 +2,14 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <string>
 #include <vector>
 
 #include "raymath.h"
+
+#include "utils.hpp"
 
 #include "input/inputMap.hpp"
 
@@ -267,4 +271,32 @@ void ApplyPersonCamera(Camera& camera, const PersonState& state, const PersonCon
     camera.up = Vector3{0.0f, 1.0f, 0.0f};
     camera.fovy = 75.0f;
     camera.projection = CAMERA_PERSPECTIVE;
+}
+
+bool SavePersonConfig(const std::string& filePath, const PersonConfig& cfg) {
+    std::ofstream f(Utils::ResolveWritableProjectPath(filePath).c_str(), std::ios::out | std::ios::trunc);
+    if (!f.is_open()) {
+        TraceLog(LOG_WARNING, "PersonConfig: failed to save %s", filePath.c_str());
+        return false;
+    }
+    f << std::fixed << std::setprecision(6);
+    f << "{\n";
+    f << "  \"fixed_time_step\": "          << cfg.fixedTimeStep          << ",\n";
+    f << "  \"walk_speed\": "               << cfg.walkSpeed              << ",\n";
+    f << "  \"acceleration\": "             << cfg.acceleration           << ",\n";
+    f << "  \"deceleration\": "             << cfg.deceleration           << ",\n";
+    f << "  \"turn_speed\": "               << cfg.turnSpeed              << ",\n";
+    f << "  \"gravity\": "                  << cfg.gravity                << ",\n";
+    f << "  \"ground_snap_distance\": "     << cfg.groundSnapDistance     << ",\n";
+    f << "  \"capsule_radius\": "           << cfg.capsuleRadius          << ",\n";
+    f << "  \"capsule_height\": "           << cfg.capsuleHeight          << ",\n";
+    f << "  \"eye_height\": "               << cfg.eyeHeight              << ",\n";
+    f << "  \"camera_smooth\": "            << cfg.cameraSmooth           << ",\n";
+    f << "  \"camera_mouse_sensitivity\": " << cfg.cameraMouseSensitivity << ",\n";
+    f << "  \"interaction_distance\": "     << cfg.interactionDistance    << ",\n";
+    f << "  \"interaction_ray_length\": "   << cfg.interactionRayLength   << ",\n";
+    f << "  \"camera_pitch_min_degrees\": " << cfg.cameraPitchMinDegrees  << ",\n";
+    f << "  \"camera_pitch_max_degrees\": " << cfg.cameraPitchMaxDegrees  << "\n";
+    f << "}\n";
+    return true;
 }

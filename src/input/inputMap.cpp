@@ -63,8 +63,10 @@ InputMap DefaultInputMap() {
     map.moveBack    = KEY_S;
     map.moveLeft    = KEY_A;
     map.moveRight   = KEY_D;
-    map.interact    = KEY_E;
-    map.openMenu    = KEY_ESCAPE;
+    map.interact        = KEY_E;
+    map.openMenu        = KEY_ESCAPE;
+    map.lightCigarette  = KEY_F;
+    map.takePuff        = KEY_T;
     return map;
 }
 
@@ -88,8 +90,10 @@ InputMap LoadInputMap(const std::string& filePath, const InputMap& fallback) {
     bind("move_back",    map.moveBack);
     bind("move_left",    map.moveLeft);
     bind("move_right",   map.moveRight);
-    bind("interact",     map.interact);
-    bind("open_menu",    map.openMenu);
+    bind("interact",          map.interact);
+    bind("open_menu",         map.openMenu);
+    bind("light_cigarette",   map.lightCigarette);
+    bind("take_puff",         map.takePuff);
 
     return map;
 }
@@ -100,20 +104,24 @@ bool IsActionDown(const InputMap& map, GameAction action) {
         case GameAction::MoveBack:    return IsKeyDown(map.moveBack);
         case GameAction::MoveLeft:    return IsKeyDown(map.moveLeft);
         case GameAction::MoveRight:   return IsKeyDown(map.moveRight);
-        case GameAction::Interact:    return IsKeyDown(map.interact);
-        case GameAction::OpenMenu:    return IsKeyDown(map.openMenu);
+        case GameAction::Interact:        return IsKeyDown(map.interact);
+        case GameAction::OpenMenu:        return IsKeyDown(map.openMenu);
+        case GameAction::LightCigarette:  return IsKeyDown(map.lightCigarette);
+        case GameAction::TakePuff:        return IsKeyDown(map.takePuff);
     }
     return false;
 }
 
 bool IsActionPressed(const InputMap& map, GameAction action) {
     switch (action) {
-        case GameAction::MoveForward: return IsKeyPressed(map.moveForward);
-        case GameAction::MoveBack:    return IsKeyPressed(map.moveBack);
-        case GameAction::MoveLeft:    return IsKeyPressed(map.moveLeft);
-        case GameAction::MoveRight:   return IsKeyPressed(map.moveRight);
-        case GameAction::Interact:    return IsKeyPressed(map.interact);
-        case GameAction::OpenMenu:    return IsKeyPressed(map.openMenu);
+        case GameAction::MoveForward:     return IsKeyPressed(map.moveForward);
+        case GameAction::MoveBack:        return IsKeyPressed(map.moveBack);
+        case GameAction::MoveLeft:        return IsKeyPressed(map.moveLeft);
+        case GameAction::MoveRight:       return IsKeyPressed(map.moveRight);
+        case GameAction::Interact:        return IsKeyPressed(map.interact);
+        case GameAction::OpenMenu:        return IsKeyPressed(map.openMenu);
+        case GameAction::LightCigarette:  return IsKeyPressed(map.lightCigarette);
+        case GameAction::TakePuff:        return IsKeyPressed(map.takePuff);
     }
     return false;
 }

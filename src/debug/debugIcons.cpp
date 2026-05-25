@@ -16,6 +16,7 @@ const char* MaterialGlyph(const char* iconName) {
     if (std::strcmp(iconName, "person") == 0) return "\xEE\x9F\xBD";      // e7fd
     if (std::strcmp(iconName, "map") == 0) return "\xEE\x95\x9B";         // e55b
     if (std::strcmp(iconName, "flashlight_on") == 0) return "SP";
+    if (std::strcmp(iconName, "smoking_rooms") == 0) return "\xEE\x86\xAA";  // e1aa
     return iconName;
 }
 
@@ -28,6 +29,7 @@ const char* FallbackLabel(const char* iconName) {
     if (std::strcmp(iconName, "person") == 0) return "CHR";
     if (std::strcmp(iconName, "map") == 0) return "MAP";
     if (std::strcmp(iconName, "save") == 0) return "SAVE";
+    if (std::strcmp(iconName, "smoking_rooms") == 0) return "SMK";
     return iconName;
 }
 
@@ -35,7 +37,7 @@ const char* FallbackLabel(const char* iconName) {
 
 bool LoadDebugIcons(DebugIcons& icons) {
     const char* path = "resources/icons/Material_Symbols_Rounded/MaterialSymbolsRounded-VariableFont_FILL,GRAD,opsz,wght.ttf";
-    int codepoints[] = {0xe872, 0xe145, 0xe0f0, 0xe430, 0xe161, 0xe7fd, 0xe55b};
+    int codepoints[] = {0xe872, 0xe145, 0xe0f0, 0xe430, 0xe161, 0xe7fd, 0xe55b, 0xe1aa};
     icons.materialSymbols = LoadFontEx(Utils::ResolveProjectPath(path).c_str(), 64, codepoints, sizeof(codepoints) / sizeof(codepoints[0]));
     icons.loaded = icons.materialSymbols.texture.id != 0;
     if (!icons.loaded) {

@@ -46,6 +46,8 @@ PersonConfig LoadPersonConfig(
     const std::string& filePath,
     const PersonConfig& fallbackConfig);
 
+bool SavePersonConfig(const std::string& filePath, const PersonConfig& cfg);
+
 PersonState CreatePersonState(const PersonConfig& config);
 
 void ResetPersonState(PersonState& state, const PersonConfig& config, Vector3 position, float yawRadians = 0.0f);

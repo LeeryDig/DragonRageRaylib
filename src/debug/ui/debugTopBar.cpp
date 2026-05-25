@@ -29,7 +29,7 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
 
     Vector2 mouse = GetMousePosition();
 
-    bool dirty = gameWorld.debugUi.levelConfigDirty;
+    bool dirty = gameWorld.debugUi.configDirty;
     const char* saveLabel = dirty ? "Save *" : "Save";
     int saveWidth = MeasureText(saveLabel, 18) + 24;
     Rectangle saveRect = Rectangle{10.0f, 5.0f, static_cast<float>(saveWidth), 24.0f};
@@ -74,15 +74,17 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
             gameWorld.debugUi.activeMenu = -1;
         }
     } else if (gameWorld.debugUi.activeMenu == 1) {
-        gameWorld.debugUi.levelConfigOpen = true;
+        gameWorld.debugUi.levelConfigOpen  = true;
         gameWorld.debugUi.levelSidebarOpen = false;
-        gameWorld.debugUi.levelLoadOpen = false;
-        gameWorld.debugUi.activeMenu = -1;
+        gameWorld.debugUi.levelLoadOpen    = false;
+        gameWorld.debugUi.personPanelOpen  = false;
+        gameWorld.debugUi.activeMenu       = -1;
     } else if (gameWorld.debugUi.activeMenu == 2) {
         gameWorld.debugUi.levelSidebarOpen = true;
-        gameWorld.debugUi.levelConfigOpen = false;
-        gameWorld.debugUi.levelLoadOpen = false;
-        gameWorld.debugUi.activeMenu = -1;
+        gameWorld.debugUi.levelConfigOpen  = false;
+        gameWorld.debugUi.levelLoadOpen    = false;
+        gameWorld.debugUi.personPanelOpen  = false;
+        gameWorld.debugUi.activeMenu       = -1;
     } else if (gameWorld.debugUi.activeMenu == 3) {
         float dx = static_cast<float>(menuX[3]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
@@ -97,8 +99,11 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
             gameWorld.debugUi.activeMenu = -1;
         }
     } else if (gameWorld.debugUi.activeMenu == 4) {
-        float dx = static_cast<float>(menuX[4]);
-        DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Person Tuning", false);
+        gameWorld.debugUi.personPanelOpen  = true;
+        gameWorld.debugUi.levelConfigOpen  = false;
+        gameWorld.debugUi.levelSidebarOpen = false;
+        gameWorld.debugUi.levelLoadOpen    = false;
+        gameWorld.debugUi.activeMenu       = -1;
     } else if (gameWorld.debugUi.activeMenu == 5) {
         float dx = static_cast<float>(menuX[5]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Physics Panel", true, gameWorld.debugUi.showPhysicsPanel)) {

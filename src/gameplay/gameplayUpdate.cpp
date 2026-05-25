@@ -3,6 +3,9 @@
 #include <raylib.h>
 #include <raymath.h>
 
+#include "smoking/smokingSystem.hpp"
+#include "particles/particleSystem.hpp"
+
 #include "debug/cameraDebug.hpp"
 #include "entity/entityRegistry.hpp"
 #include "game/gameWorld.hpp"
@@ -61,6 +64,9 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     }
 
     ApplyPersonCamera(gameWorld.render.camera, gameWorld.player.state, gameWorld.player.config, frameDelta);
+    UpdateSmoking(gameWorld.player.smoking, gameWorld.player.smokingConfig, gameWorld.player.input, frameDelta);
+    UpdateSmokingParticles(gameWorld.player.smoking, gameWorld.player.smokingConfig, gameWorld.particles, gameWorld.player.state.position);
+    gameWorld.particles.UpdateParticles(frameDelta);
     UpdateEntityFocus(
         gameWorld.npcs,
         gameWorld.render.camera,

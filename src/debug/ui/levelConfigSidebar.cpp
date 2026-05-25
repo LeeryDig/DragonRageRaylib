@@ -128,7 +128,7 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
 
         if (DebugButton(Rectangle{x + 14.0f, y, 120.0f, 28.0f}, fog.enabled ? "Enabled" : "Disabled")) {
             fog.enabled = !fog.enabled;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 44.0f;
 
@@ -137,32 +137,32 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         float blue = static_cast<float>(fog.color.b);
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Red", red, 0.0f, 255.0f)) {
             fog.color.r = static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Green", green, 0.0f, 255.0f)) {
             fog.color.g = static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Blue", blue, 0.0f, 255.0f)) {
             fog.color.b = static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 40.0f;
 
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Start", fog.start, 0.0f, 500.0f)) {
             if (fog.start > fog.end - 1.0f) fog.end = fog.start + 1.0f;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "End", fog.end, 1.0f, 800.0f)) {
             if (fog.end < fog.start + 1.0f) fog.start = fog.end - 1.0f;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Density", fog.density, 0.25f, 4.0f)) {
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 42.0f;
 
@@ -170,7 +170,7 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         DrawRectangleLinesEx(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, 1.0f, RAYWHITE);
         DrawText(TextFormat("RGB %d %d %d", fog.color.r, fog.color.g, fog.color.b), static_cast<int>(x + 96.0f), static_cast<int>(y + 6.0f), 14, LIGHTGRAY);
         y += 42.0f;
-        DrawText(TextFormat("Mode: linear  %s", gameWorld.debugUi.levelConfigDirty ? "[unsaved]" : "[saved]"), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, gameWorld.debugUi.levelConfigDirty ? YELLOW : LIGHTGRAY);
+        DrawText(TextFormat("Mode: linear  %s", gameWorld.debugUi.configDirty ? "[unsaved]" : "[saved]"), static_cast<int>(x + 14.0f), static_cast<int>(y), 14, gameWorld.debugUi.configDirty ? YELLOW : LIGHTGRAY);
         return;
     }
 
@@ -184,17 +184,17 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         float blue = static_cast<float>(ambient.b);
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient R", red, 0.0f, 255.0f)) {
             ambient.r = static_cast<unsigned char>(Clamp(red, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient G", green, 0.0f, 255.0f)) {
             ambient.g = static_cast<unsigned char>(Clamp(green, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Ambient B", blue, 0.0f, 255.0f)) {
             ambient.b = static_cast<unsigned char>(Clamp(blue, 0.0f, 255.0f));
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 42.0f;
         DrawRectangleRec(Rectangle{x + 14.0f, y, 70.0f, 28.0f}, ambient);
@@ -205,18 +205,18 @@ void DrawLevelConfigSidebar(GameWorld& gameWorld, const LevelConfigActions& acti
         y += 26.0f;
         if (DebugButton(Rectangle{x + 14.0f, y, 150.0f, 28.0f}, gameWorld.world.runtimeConfig.lighting.shadowsEnabled ? "Shadows ON" : "Shadows OFF")) {
             gameWorld.world.runtimeConfig.lighting.shadowsEnabled = !gameWorld.world.runtimeConfig.lighting.shadowsEnabled;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 40.0f;
         float bias = gameWorld.world.runtimeConfig.lighting.shadowBias;
         if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Bias", bias, 0.0f, 0.05f)) {
             gameWorld.world.runtimeConfig.lighting.shadowBias = bias;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
         y += 32.0f;
-        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Strength", gameWorld.world.runtimeConfig.lighting.shadowStrength, 0.0f, 1.0f)) gameWorld.debugUi.levelConfigDirty = true;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Strength", gameWorld.world.runtimeConfig.lighting.shadowStrength, 0.0f, 1.0f)) gameWorld.debugUi.configDirty = true;
         y += 32.0f;
-        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Area", gameWorld.world.runtimeConfig.lighting.shadowAreaSize, 5.0f, 120.0f)) gameWorld.debugUi.levelConfigDirty = true;
+        if (DebugFloatSlider(Rectangle{x + 14.0f, y, width - 28.0f, 26.0f}, "Area", gameWorld.world.runtimeConfig.lighting.shadowAreaSize, 5.0f, 120.0f)) gameWorld.debugUi.configDirty = true;
         return;
     }
 

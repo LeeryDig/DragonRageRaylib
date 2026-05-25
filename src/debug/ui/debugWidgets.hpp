@@ -13,6 +13,7 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool c
 bool DebugButton(Rectangle rect, const char* text);
 bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fieldId, DebugUiState& ui);
 bool DebugFloatSlider(Rectangle rect, const char* label, float& value, float minValue, float maxValue);
+bool DebugFloatInputRow(Rectangle rect, const char* label, float& value, float minValue, float maxValue, int fieldId, DebugUiState& ui);
 void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value);
 
 bool BeginDebugPanel(

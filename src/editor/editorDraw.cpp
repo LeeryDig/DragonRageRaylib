@@ -11,6 +11,7 @@
 #include "debug/levelDebugDraw.hpp"
 #include "debug/ui/debugUi.hpp"
 #include "game/gameWorld.hpp"
+#include "gameplay/smoking/smokingConfig.hpp"
 #include "entity/entityRegistry.hpp"
 #include "gameplay/worldActions.hpp"
 #include "interactionSystem.hpp"
@@ -259,7 +260,7 @@ void AddDebugLight(GameWorld& gameWorld, LightType type) {
     SetVectorInput(gameWorld.debugUi.levelPositionInput, light.position);
     SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(light.rotation));
     gameWorld.debugUi.levelSidebarOpen = true;
-    gameWorld.debugUi.levelConfigDirty = true;
+    gameWorld.debugUi.configDirty = true;
 }
 
 void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
@@ -270,7 +271,7 @@ void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
         gameWorld.world.runtimeConfig.lighting.lights.erase(
             gameWorld.world.runtimeConfig.lighting.lights.begin() + lightIndex);
         gameWorld.debugUi.selectedLevelNode = -1;
-        gameWorld.debugUi.levelConfigDirty = true;
+        gameWorld.debugUi.configDirty = true;
         return;
     }
     if (gameWorld.debugUi.selectedLevelNode <= -1000
@@ -284,7 +285,7 @@ void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
         gameWorld.npcs = LoadEntityRegistry(gameWorld.world.runtimeConfig.characters);
         ApplyRuntimeRenderConfig(gameWorld);
         gameWorld.debugUi.selectedLevelNode = -1;
-        gameWorld.debugUi.levelConfigDirty = true;
+        gameWorld.debugUi.configDirty = true;
     }
 }
 
@@ -356,7 +357,7 @@ void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rot
             gameWorld.npcs.characters.size())) {
             ApplyCharacterRootTransform(
                 gameWorld.npcs.characters[characterIndex], position, rotation);
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
     } else if (gameWorld.debugUi.selectedLevelNode <= -300000) {
         int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
@@ -365,7 +366,7 @@ void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rot
             LevelLightConfig& light = gameWorld.world.runtimeConfig.lighting.lights[lightIndex];
             light.position = position;
             light.rotation = rotation;
-            gameWorld.debugUi.levelConfigDirty = true;
+            gameWorld.debugUi.configDirty = true;
         }
     } else if (gameWorld.debugUi.selectedLevelNode >= 0
         && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.world.level.debugNodes.size())) {
@@ -714,7 +715,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                         ApplyCharacterRootTransform(
                             gameWorld.npcs.characters[characterIndex],
                             position, QuaternionFromEulerDegrees(rotationDegrees));
-                        gameWorld.debugUi.levelConfigDirty = true;
+                        gameWorld.debugUi.configDirty = true;
                     }
                 } else {
                     ApplyLevelRootTransform(
@@ -732,7 +733,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                         gameWorld.npcs.characters[characterIndex],
                         gameWorld.render.camera.position,
                         gameWorld.npcs.characters[characterIndex].rootRotation);
-                    gameWorld.debugUi.levelConfigDirty = true;
+                    gameWorld.debugUi.configDirty = true;
                     SetVectorInput(gameWorld.debugUi.levelPositionInput,
                         gameWorld.npcs.characters[characterIndex].rootPosition);
                 }
@@ -873,7 +874,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 255};
 
             if (changed) {
-                gameWorld.debugUi.levelConfigDirty = true;
+                gameWorld.debugUi.configDirty = true;
                 Vector3 position = Vector3Zero();
                 Vector3 rotationDegrees = Vector3Zero();
                 if (ParseVectorInput(gameWorld.debugUi.levelPositionInput, position)
@@ -885,7 +886,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             if (DebugButton(Rectangle{x + 14.0f, editY, 190.0f, 26.0f}, "Teleport to Camera")) {
                 light.position = gameWorld.render.camera.position;
                 SetVectorInput(gameWorld.debugUi.levelPositionInput, light.position);
-                gameWorld.debugUi.levelConfigDirty = true;
+                gameWorld.debugUi.configDirty = true;
             }
             editY += 34.0f;
             Rectangle deleteRect = Rectangle{x + 214.0f, editY, 92.0f, 26.0f};
@@ -1132,11 +1133,81 @@ void DrawDebugLightIcons2D(GameWorld& gameWorld) {
     }
 }
 
+void DrawSmokingEmitIcon2D(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.enabled
+        || !gameWorld.debugUi.personPanelOpen
+        || gameWorld.debugUi.personPanelTab != 1) return;
+    const ParticleEmitterConfig& pcfg = gameWorld.player.smokingConfig.postPuffParticles;
+    Vector3 emitPos = Vector3{
+        gameWorld.player.state.position.x + pcfg.emitOffsetX,
+        gameWorld.player.state.position.y + pcfg.emitOffsetY,
+        gameWorld.player.state.position.z + pcfg.emitOffsetZ
+    };
+    DrawDebugIconBillboard(gameWorld.render.debugIcons, gameWorld.render.camera,
+        "smoking_rooms", emitPos, 28.0f, Color{200, 200, 100, 220});
+}
+
+void DrawSmokingEmitGizmo(GameWorld& gameWorld) {
+    if (!gameWorld.debugUi.enabled
+        || !gameWorld.debugUi.personPanelOpen
+        || gameWorld.debugUi.personPanelTab != 1) return;
+
+    ParticleEmitterConfig& pcfg = gameWorld.player.smokingConfig.postPuffParticles;
+    Vector3 origin = gameWorld.player.state.position;
+    Vector3 gizmoPos = Vector3{
+        origin.x + pcfg.emitOffsetX,
+        origin.y + pcfg.emitOffsetY,
+        origin.z + pcfg.emitOffsetZ
+    };
+
+    const Vector3 axes[3]   = {{1,0,0}, {0,1,0}, {0,0,1}};
+    const Color   colors[3] = {RED, GREEN, BLUE};
+    Vector2 mouse = GetMousePosition();
+
+    float bestDist  = 99999.0f;
+    int   hoveredAxis = -1;
+    for (int i = 0; i < 3; ++i) {
+        Vector3 end = Vector3Add(gizmoPos, Vector3Scale(axes[i], 1.2f));
+        DrawLine3D(gizmoPos, end, colors[i]);
+        DrawSphere(end, 0.07f, colors[i]);
+        float dist = Vector2Distance(mouse, GetWorldToScreen(end, gameWorld.render.camera));
+        if (dist < bestDist && dist < 18.0f) { bestDist = dist; hoveredAxis = i; }
+    }
+
+    DebugUiState& ui = gameWorld.debugUi;
+    if (!ui.smokingGizmoDragging && hoveredAxis >= 0 && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        ui.smokingGizmoDragging  = true;
+        ui.smokingGizmoAxis      = hoveredAxis;
+        ui.smokingGizmoLastMouse = mouse;
+    }
+    if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        ui.smokingGizmoDragging = false;
+        ui.smokingGizmoAxis     = -1;
+    }
+    if (!ui.smokingGizmoDragging || ui.smokingGizmoAxis < 0) return;
+
+    Vector2 delta   = Vector2Subtract(mouse, ui.smokingGizmoLastMouse);
+    ui.smokingGizmoLastMouse = mouse;
+    int axisIndex   = ui.smokingGizmoAxis;
+    Vector2 screenPos  = GetWorldToScreen(gizmoPos, gameWorld.render.camera);
+    Vector2 screenAxis = Vector2Subtract(
+        GetWorldToScreen(Vector3Add(gizmoPos, axes[axisIndex]), gameWorld.render.camera), screenPos);
+    float axisLen = Vector2Length(screenAxis);
+    if (axisLen <= 0.001f) return;
+    screenAxis = Vector2Scale(screenAxis, 1.0f / axisLen);
+    float move = Vector2DotProduct(delta, screenAxis) * 0.025f;
+
+    float* offsets[3] = {&pcfg.emitOffsetX, &pcfg.emitOffsetY, &pcfg.emitOffsetZ};
+    *offsets[axisIndex] += move;
+    gameWorld.debugUi.configDirty = true;
+}
+
 }  // namespace
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 void editor::Draw3DOverlays(GameWorld& gameWorld) {
+    DrawSmokingEmitGizmo(gameWorld);
     if (!gameWorld.debugUi.levelSidebarOpen) {
         DrawTransformGizmo(gameWorld);
         return;
@@ -1218,6 +1289,7 @@ void editor::Draw3DOverlays(GameWorld& gameWorld) {
 }
 
 void editor::Draw2DOverlays(GameWorld& gameWorld) {
+    DrawSmokingEmitIcon2D(gameWorld);
     DrawDebugLightIcons2D(gameWorld);
     debug_ui::DrawTopBar(gameWorld, debug_ui::TopBarActions{
         RestartLevel, ResetGameWorld, SaveCurrentLevelRuntimeConfig});

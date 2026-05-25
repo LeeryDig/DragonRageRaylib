@@ -10,6 +10,8 @@ enum class GameAction {
     MoveRight,
     Interact,
     OpenMenu,
+    LightCigarette,
+    TakePuff,
 };
 
 struct InputMap {
@@ -19,6 +21,8 @@ struct InputMap {
     int moveRight;
     int interact;
     int openMenu;
+    int lightCigarette;
+    int takePuff;
 };
 
 InputMap DefaultInputMap();

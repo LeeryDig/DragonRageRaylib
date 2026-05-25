@@ -2,6 +2,11 @@
 
 #include <raylib.h>
 
+#include "debug/debugIcons.hpp"
+#include "debug/ui/personPanel.hpp"
+#include "particles/particleSystem.hpp"
+#include "smoking/smokingUi.hpp"
+
 #include "debug/levelDebugDraw.hpp"
 #include "editor/editorDraw.hpp"
 #include "entity/entityRegistry.hpp"
@@ -21,10 +26,13 @@ void DrawGameplay(GameWorld& gameWorld) {
         DrawPersonDebugCapsule(gameWorld.player.state, gameWorld.player.config);
         DrawSphere(gameWorld.player.state.position, 0.05f, gameWorld.player.state.grounded ? GREEN : RED);
     }
+    gameWorld.particles.DrawParticles(gameWorld.render.camera);
     editor::Draw3DOverlays(gameWorld);
     EndMode3D();
     editor::Draw2DOverlays(gameWorld);
     DrawInteractionUi(gameWorld.npcs);
+    DrawSmokingUi(gameWorld.player.smoking, GetScreenWidth(), GetScreenHeight());
+    debug_ui::DrawPersonPanel(gameWorld);
     if (gameWorld.debugUi.enabled) {
         DrawDebugAxisGizmo(gameWorld.render.camera);
     }

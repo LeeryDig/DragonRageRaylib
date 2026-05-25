@@ -1,6 +1,8 @@
 #include "debug/ui/debugWidgets.hpp"
 
+#include <cstdio>
 #include <cstdlib>
+#include <string>
 
 #include "raymath.h"
 
@@ -84,6 +86,69 @@ bool DebugFloatSlider(Rectangle rect, const char* label, float& value, float min
     DrawCircle(static_cast<int>(bar.x + bar.width * normalized), static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
     DrawText(TextFormat("%.3f", value), static_cast<int>(rect.x + rect.width - 70.0f), static_cast<int>(rect.y + 2), 16, LIGHTGRAY);
     return changed;
+}
+
+bool DebugFloatInputRow(Rectangle rect, const char* label, float& value, float minValue, float maxValue, int fieldId, DebugUiState& ui) {
+    constexpr float INPUT_W = 88.0f;
+    constexpr float GAP     = 4.0f;
+
+    Rectangle sliderRect = {rect.x, rect.y, rect.width - INPUT_W - GAP, rect.height};
+    Rectangle inputRect  = {rect.x + rect.width - INPUT_W, rect.y + 4.0f, INPUT_W, rect.height - 8.0f};
+
+    // Slider (reuse existing but skip its value text — covered by input box)
+    Rectangle bar = {sliderRect.x + 150.0f, sliderRect.y + 8.0f, sliderRect.width - 155.0f, 8.0f};
+    bool sliderChanged = false;
+    Vector2 mouse = GetMousePosition();
+    if (CheckCollisionPointRec(mouse, Rectangle{bar.x, rect.y, bar.width, rect.height}) && IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+        float t = Clamp((mouse.x - bar.x) / bar.width, 0.0f, 1.0f);
+        value = minValue + (maxValue - minValue) * t;
+        sliderChanged = true;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.4f", value);
+        if (ui.activeTextField != fieldId) ui.activeTextFieldBuffer = buf;
+    }
+    float normalized = Clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
+    DrawText(label, static_cast<int>(sliderRect.x), static_cast<int>(sliderRect.y + 2), 16, RAYWHITE);
+    DrawRectangleRec(bar, Color{55, 55, 62, 255});
+    DrawRectangleRec(Rectangle{bar.x, bar.y, bar.width * normalized, bar.height}, Color{90, 130, 210, 255});
+    DrawCircle(static_cast<int>(bar.x + bar.width * normalized), static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
+
+    // Input box
+    bool hovered = CheckCollisionPointRec(mouse, inputRect);
+    bool active  = ui.activeTextField == fieldId;
+    if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        ui.activeTextField = fieldId;
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%.4f", value);
+        ui.activeTextFieldBuffer = buf;
+    }
+    DrawRectangleRec(inputRect, active ? Color{46, 56, 72, 255} : Color{36, 36, 42, 255});
+    DrawRectangleLinesEx(inputRect, 1.0f, active ? Color{120, 150, 220, 255} : Color{85, 85, 95, 255});
+    const char* displayStr = active ? ui.activeTextFieldBuffer.c_str() : TextFormat("%.4f", value);
+    DrawText(displayStr, static_cast<int>(inputRect.x + 4.0f), static_cast<int>(inputRect.y + 3.0f), 14, RAYWHITE);
+
+    bool inputChanged = false;
+    if (active) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            char c = static_cast<char>(key);
+            if ((c >= '0' && c <= '9') || c == '-' || c == '.') {
+                if (ui.activeTextFieldBuffer.size() < 16) ui.activeTextFieldBuffer.push_back(c);
+            }
+            key = GetCharPressed();
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && !ui.activeTextFieldBuffer.empty()) {
+            ui.activeTextFieldBuffer.pop_back();
+        }
+        if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER)) {
+            try { value = std::stof(ui.activeTextFieldBuffer); } catch (...) {}
+            value = Clamp(value, minValue, maxValue);
+            ui.activeTextField = 0;
+            inputChanged = true;
+        }
+    }
+
+    return sliderChanged || inputChanged;
 }
 
 void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
