@@ -58,5 +58,10 @@
     ]
   },
   "characters": [
+    {
+      "config": "resources/character/chartest.json",
+      "position": [3.000, 0.000, 1.800],
+      "rotation": [-180.000, 8.971, -180.000]
+    }
   ]
 }
