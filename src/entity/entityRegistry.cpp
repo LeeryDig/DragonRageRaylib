@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "entityRegistry.hpp"
 
 #include <algorithm>
@@ -28,7 +29,7 @@ float DistanceRayToCapsuleApprox(Ray ray, const CharacterCapsule& capsule) {
     return best;
 }
 
-void WrapAndDrawText(const std::string& text, int x, int y, int fontSize, int maxWidth, Color color) {
+void WrapAndDrawUiText(const std::string& text, int x, int y, int fontSize, int maxWidth, Color color) {
     std::string line;
     std::string word;
     int lineY = y;
@@ -36,8 +37,8 @@ void WrapAndDrawText(const std::string& text, int x, int y, int fontSize, int ma
         char c = i < text.size() ? text[i] : ' ';
         if (c == ' ' || c == '\n' || i == text.size()) {
             std::string test = line.empty() ? word : line + " " + word;
-            if (!line.empty() && MeasureText(test.c_str(), fontSize) > maxWidth) {
-                DrawText(line.c_str(), x, lineY, fontSize, color);
+            if (!line.empty() && MeasureUiText(test.c_str(), fontSize) > maxWidth) {
+                DrawUiText(line.c_str(), x, lineY, fontSize, color);
                 lineY += fontSize + 6;
                 line = word;
             } else {
@@ -45,7 +46,7 @@ void WrapAndDrawText(const std::string& text, int x, int y, int fontSize, int ma
             }
             word.clear();
             if (c == '\n') {
-                DrawText(line.c_str(), x, lineY, fontSize, color);
+                DrawUiText(line.c_str(), x, lineY, fontSize, color);
                 lineY += fontSize + 6;
                 line.clear();
             }
@@ -53,7 +54,7 @@ void WrapAndDrawText(const std::string& text, int x, int y, int fontSize, int ma
             word.push_back(c);
         }
     }
-    if (!line.empty()) DrawText(line.c_str(), x, lineY, fontSize, color);
+    if (!line.empty()) DrawUiText(line.c_str(), x, lineY, fontSize, color);
 }
 
 }  // namespace
@@ -279,9 +280,9 @@ void DrawInteractionUi(const EntityRegistry& registry) {
     if (!registry.dialogueOpen) {
         if (registry.focusedId != INVALID_ENTITY) {
             const char* prompt = "E Interagir";
-            int width = MeasureText(prompt, 22);
+            int width = MeasureUiText(prompt, 22);
             DrawRectangle(GetScreenWidth() / 2 - width / 2 - 14, GetScreenHeight() - 95, width + 28, 36, Color{0, 0, 0, 150});
-            DrawText(prompt, GetScreenWidth() / 2 - width / 2, GetScreenHeight() - 88, 22, RAYWHITE);
+            DrawUiText(prompt, GetScreenWidth() / 2 - width / 2, GetScreenHeight() - 88, 22, RAYWHITE);
         }
         return;
     }
@@ -304,12 +305,12 @@ void DrawInteractionUi(const EntityRegistry& registry) {
     Rectangle portrait = Rectangle{panel.x + 24.0f, panel.y + 28.0f, 104.0f, 104.0f};
     DrawRectangleRec(portrait, Color{55, 55, 70, 255});
     DrawRectangleLinesEx(portrait, 2.0f, Color{160, 160, 180, 255});
-    DrawText("IMG", static_cast<int>(portrait.x + 31), static_cast<int>(portrait.y + 40), 24, LIGHTGRAY);
+    DrawUiText("IMG", static_cast<int>(portrait.x + 31), static_cast<int>(portrait.y + 40), 24, LIGHTGRAY);
 
     int textX = static_cast<int>(panel.x + 154.0f);
     int textY = static_cast<int>(panel.y + 28.0f);
-    DrawText(character->displayName.c_str(), textX, textY, 26, RAYWHITE);
-    WrapAndDrawText(character->dialogueText, textX, textY + 42, 21, static_cast<int>(panel.width - 190.0f), LIGHTGRAY);
+    DrawUiText(character->displayName.c_str(), textX, textY, 26, RAYWHITE);
+    WrapAndDrawUiText(character->dialogueText, textX, textY + 42, 21, static_cast<int>(panel.width - 190.0f), LIGHTGRAY);
 
     int choiceY = static_cast<int>(panel.y + panel.height - 32.0f - visibleChoiceRows * 24);
     if (!character->choices.empty()) {
@@ -322,7 +323,7 @@ void DrawInteractionUi(const EntityRegistry& registry) {
         for (int row = 0; row < visibleChoiceRows; ++row) {
             int choiceIndex = firstChoice + row;
             Color color = registry.selectedChoiceIndex == choiceIndex ? YELLOW : RAYWHITE;
-            DrawText(
+            DrawUiText(
                 TextFormat("%s %s",
                     registry.selectedChoiceIndex == choiceIndex ? ">" : " ",
                     character->choices[choiceIndex].text.c_str()),
@@ -330,14 +331,14 @@ void DrawInteractionUi(const EntityRegistry& registry) {
             choiceY += 24;
         }
         if (choiceCount > visibleChoiceRows) {
-            DrawText(
+            DrawUiText(
                 TextFormat("%d/%d", registry.selectedChoiceIndex + 1, choiceCount),
                 static_cast<int>(panel.x + panel.width - 70.0f),
                 static_cast<int>(panel.y + panel.height - 28.0f),
                 16, GRAY);
         }
     } else {
-        DrawText("E continuar",
+        DrawUiText("E continuar",
             static_cast<int>(panel.x + panel.width - 140.0f), choiceY, 18, GRAY);
     }
 }

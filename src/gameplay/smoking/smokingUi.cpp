@@ -4,6 +4,8 @@
 
 #include <raylib.h>
 
+#include "uiText.hpp"
+
 namespace {
     constexpr float BAR_WIDTH    = 200.0f;
     constexpr float BAR_HEIGHT   = 14.0f;
@@ -17,8 +19,8 @@ void DrawSmokingUi(const SmokingState& state, int screenWidth, int screenHeight)
     float barY =  screenHeight - BAR_Y_OFFSET - BAR_HEIGHT;
 
     std::string packText = "Cigarros: " + std::to_string(state.cigarettesInPack);
-    int textWidth = MeasureText(packText.c_str(), FONT_SIZE);
-    DrawText(
+    int textWidth = MeasureUiText(packText.c_str(), FONT_SIZE);
+    DrawUiText(
         packText.c_str(),
         screenWidth / 2 - textWidth / 2,
         static_cast<int>(barY - PACK_GAP - FONT_SIZE),
@@ -40,5 +42,5 @@ void DrawSmokingUi(const SmokingState& state, int screenWidth, int screenHeight)
     }
 
     const char* label = (state.phase == SmokingPhase::PUFFING) ? "Tragando..." : "Aceso";
-    DrawText(label, static_cast<int>(barX + BAR_WIDTH + 10.0f), static_cast<int>(barY), 14, DARKGRAY);
+    DrawUiText(label, static_cast<int>(barX + BAR_WIDTH + 10.0f), static_cast<int>(barY), 14, DARKGRAY);
 }

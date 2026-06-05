@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "debug/ui/debugWidgets.hpp"
 
 #include <cstdio>
@@ -14,9 +15,9 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled, bool checked)
     DrawRectangleRec(rect, hovered ? Color{70, 70, 78, 255} : Color{42, 42, 48, 245});
     DrawRectangleLinesEx(rect, 1.0f, Color{78, 78, 86, 255});
     if (checked) {
-        DrawText("✓", static_cast<int>(rect.x + 8), static_cast<int>(rect.y + 5), 18, RAYWHITE);
+        DrawUiText("✓", static_cast<int>(rect.x + 8), static_cast<int>(rect.y + 5), 18, RAYWHITE);
     }
-    DrawText(text, static_cast<int>(rect.x + 28), static_cast<int>(rect.y + 6), 18, enabled ? RAYWHITE : GRAY);
+    DrawUiText(text, static_cast<int>(rect.x + 28), static_cast<int>(rect.y + 6), 18, enabled ? RAYWHITE : GRAY);
     return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
@@ -25,8 +26,8 @@ bool DebugButton(Rectangle rect, const char* text) {
     bool hovered = CheckCollisionPointRec(mouse, rect);
     DrawRectangleRec(rect, hovered ? Color{78, 78, 88, 255} : Color{56, 56, 64, 255});
     DrawRectangleLinesEx(rect, 1.0f, Color{95, 95, 105, 255});
-    int textWidth = MeasureText(text, 16);
-    DrawText(text, static_cast<int>(rect.x + rect.width * 0.5f - textWidth * 0.5f), static_cast<int>(rect.y + 6), 16, RAYWHITE);
+    int textWidth = MeasureUiText(text, 16);
+    DrawUiText(text, static_cast<int>(rect.x + rect.width * 0.5f - textWidth * 0.5f), static_cast<int>(rect.y + 6), 16, RAYWHITE);
     return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
@@ -39,12 +40,12 @@ bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fi
 
     bool active = ui.activeTextField == fieldId;
     bool changed = false;
-    DrawText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 5), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 5), 16, RAYWHITE);
 
     Rectangle inputRect = Rectangle{rect.x + 24.0f, rect.y, rect.width - 24.0f, rect.height};
     DrawRectangleRec(inputRect, active ? Color{46, 56, 72, 255} : Color{36, 36, 42, 255});
     DrawRectangleLinesEx(inputRect, 1.0f, active ? Color{120, 150, 220, 255} : Color{85, 85, 95, 255});
-    DrawText(text.c_str(), static_cast<int>(inputRect.x + 6.0f), static_cast<int>(inputRect.y + 5.0f), 16, RAYWHITE);
+    DrawUiText(text.c_str(), static_cast<int>(inputRect.x + 6.0f), static_cast<int>(inputRect.y + 5.0f), 16, RAYWHITE);
 
     if (active) {
         int key = GetCharPressed();
@@ -80,11 +81,11 @@ bool DebugFloatSlider(Rectangle rect, const char* label, float& value, float min
     }
 
     float normalized = Clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
-    DrawText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 2), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 2), 16, RAYWHITE);
     DrawRectangleRec(bar, Color{55, 55, 62, 255});
     DrawRectangleRec(Rectangle{bar.x, bar.y, bar.width * normalized, bar.height}, Color{90, 130, 210, 255});
     DrawCircle(static_cast<int>(bar.x + bar.width * normalized), static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
-    DrawText(TextFormat("%.3f", value), static_cast<int>(rect.x + rect.width - 70.0f), static_cast<int>(rect.y + 2), 16, LIGHTGRAY);
+    DrawUiText(TextFormat("%.3f", value), static_cast<int>(rect.x + rect.width - 70.0f), static_cast<int>(rect.y + 2), 16, LIGHTGRAY);
     return changed;
 }
 
@@ -108,7 +109,7 @@ bool DebugFloatInputRow(Rectangle rect, const char* label, float& value, float m
         if (ui.activeTextField != fieldId) ui.activeTextFieldBuffer = buf;
     }
     float normalized = Clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
-    DrawText(label, static_cast<int>(sliderRect.x), static_cast<int>(sliderRect.y + 2), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(sliderRect.x), static_cast<int>(sliderRect.y + 2), 16, RAYWHITE);
     DrawRectangleRec(bar, Color{55, 55, 62, 255});
     DrawRectangleRec(Rectangle{bar.x, bar.y, bar.width * normalized, bar.height}, Color{90, 130, 210, 255});
     DrawCircle(static_cast<int>(bar.x + bar.width * normalized), static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
@@ -125,7 +126,7 @@ bool DebugFloatInputRow(Rectangle rect, const char* label, float& value, float m
     DrawRectangleRec(inputRect, active ? Color{46, 56, 72, 255} : Color{36, 36, 42, 255});
     DrawRectangleLinesEx(inputRect, 1.0f, active ? Color{120, 150, 220, 255} : Color{85, 85, 95, 255});
     const char* displayStr = active ? ui.activeTextFieldBuffer.c_str() : TextFormat("%.4f", value);
-    DrawText(displayStr, static_cast<int>(inputRect.x + 4.0f), static_cast<int>(inputRect.y + 3.0f), 14, RAYWHITE);
+    DrawUiText(displayStr, static_cast<int>(inputRect.x + 4.0f), static_cast<int>(inputRect.y + 3.0f), 14, RAYWHITE);
 
     bool inputChanged = false;
     if (active) {
@@ -152,7 +153,7 @@ bool DebugFloatInputRow(Rectangle rect, const char* label, float& value, float m
 }
 
 void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
-    DrawText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z), static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
+    DrawUiText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z), static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
 }
 
 bool BeginDebugPanel(
@@ -189,10 +190,10 @@ bool BeginDebugPanel(
     DrawRectangleRec(panelRect, Color{28, 28, 32, 220});
     DrawRectangleRec(titleRect, Color{42, 42, 48, 245});
     DrawRectangleLinesEx(panelRect, 1.0f, Color{80, 80, 88, 255});
-    DrawText(title, static_cast<int>(position.x + 12.0f), static_cast<int>(position.y + 6.0f), 18, RAYWHITE);
+    DrawUiText(title, static_cast<int>(position.x + 12.0f), static_cast<int>(position.y + 6.0f), 18, RAYWHITE);
     DrawRectangleRec(pinRect, pinned ? Color{80, 120, 80, 255} : Color{65, 65, 72, 255});
     DrawRectangleLinesEx(pinRect, 1.0f, Color{95, 95, 105, 255});
-    DrawText("P", static_cast<int>(pinRect.x + 6.0f), static_cast<int>(pinRect.y + 2.0f), 16, RAYWHITE);
+    DrawUiText("P", static_cast<int>(pinRect.x + 6.0f), static_cast<int>(pinRect.y + 2.0f), 16, RAYWHITE);
     return true;
 }
 

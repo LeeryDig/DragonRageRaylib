@@ -34,7 +34,7 @@
         "type": "point",
         "enabled": true,
         "position": [4.630, 1.570, 0.108],
-        "rotation": [158.363, -17.449, 180.000],
+        "rotation": [158.363, -17.449, -180.000],
         "color": [255, 220, 170],
         "intensity": 1.977,
         "range": 4.288,
@@ -57,11 +57,13 @@
       }
     ]
   },
+  "props": [
+  ],
   "characters": [
     {
       "config": "resources/character/chartest.json",
       "position": [3.000, 0.000, 1.800],
-      "rotation": [-180.000, 8.971, -180.000]
+      "rotation": [180.000, 8.971, 180.000]
     }
   ]
 }

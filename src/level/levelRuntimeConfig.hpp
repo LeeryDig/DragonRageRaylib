@@ -81,11 +81,27 @@ struct LightingConfig {
           lights() {}
 };
 
+struct LevelPropConfig {
+    std::string id;
+    std::string modelPath;
+    Vector3 position;
+    Quaternion rotation;
+    Vector3 scale;
+
+    LevelPropConfig()
+        : id("prop"),
+          modelPath(),
+          position{0.0f, 0.0f, 0.0f},
+          rotation{0.0f, 0.0f, 0.0f, 1.0f},
+          scale{1.0f, 1.0f, 1.0f} {}
+};
+
 struct LevelRuntimeConfig {
     std::string skyboxPath;
     FogConfig fog;
     LightingConfig lighting;
     std::vector<CharacterSpawnConfig> characters;
+    std::vector<LevelPropConfig> props;
 };
 
 LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath);

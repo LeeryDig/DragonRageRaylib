@@ -16,6 +16,7 @@
 #include "level/levelLoader.hpp"
 #include "level/levelRuntimeConfig.hpp"
 #include "level/levelsConfig.hpp"
+#include "gameplay/props.hpp"
 #include "gameplay/smoking/smokingConfig.hpp"
 #include "personController.hpp"
 #include "physics/jolt/joltWorld.hpp"
@@ -36,6 +37,7 @@ static Vector3 EulerDegreesFromQuaternion(Quaternion rotation) {
 
 void ApplyRuntimeRenderConfig(GameWorld& gameWorld) {
     ApplyFogShaderToModel(gameWorld.world.level.visualModel, gameWorld.render.fogShader);
+    ApplyFogShaderToRuntimeProps(gameWorld.world.props, gameWorld.render.fogShader);
     for (int i = 0; i < CharacterCount(gameWorld.npcs); ++i) {
         InteractableCharacter& ch = CharacterAt(gameWorld.npcs, i);
         if (ch.hasModel) ApplyFogShaderToModel(ch.model, gameWorld.render.fogShader);
@@ -76,11 +78,13 @@ void ResetGameWorld(GameWorld& gameWorld) {
 void RestartLevel(GameWorld& gameWorld) {
     gameWorld.particles.Unload();
     gameWorld.player.smoking.emitterHandle = -1;
+    UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.runtimeConfig = LoadLevelRuntimeConfig(gameWorld.world.currentLevelConfigPath);
     gameWorld.debugUi.configDirty = false;
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
+    LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -97,6 +101,7 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
 
     gameWorld.particles.Unload();
     gameWorld.player.smoking.emitterHandle = -1;
+    UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.currentLevelConfigIndex = levelIndex;
     gameWorld.world.currentLevelPath = entry->path;
@@ -105,6 +110,7 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
     gameWorld.debugUi.configDirty = false;
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
+    LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -165,6 +171,7 @@ void ReloadCurrentLevelForConfig(GameWorld& gameWorld) {
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
+    LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
     ApplyRuntimeRenderConfig(gameWorld);
     ResetGameWorld(gameWorld);
 }
@@ -193,6 +200,7 @@ GameWorld LoadGameWorld() {
     LoadDebugIcons(gameWorld.render.debugIcons);
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
+    LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -234,6 +242,7 @@ void UnloadGameWorld(GameWorld& gameWorld) {
     gameWorld.particles.Unload();
     gameWorld.player.physics->Shutdown();
     DestroyEntityRegistry(gameWorld.npcs);
+    UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     UnloadFogShader(gameWorld.render.fogShader);
     UnloadDebugIcons(gameWorld.render.debugIcons);

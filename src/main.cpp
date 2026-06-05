@@ -6,6 +6,7 @@
 #include "gameplay/gameplayUpdate.hpp"
 #include "gameplay/worldActions.hpp"
 #include "personController.hpp"
+#include "uiText.hpp"
 #include "utils.hpp"
 
 static const char* WORLD_CONFIG_PATH = "resources/config/world.json";
@@ -24,6 +25,7 @@ int main() {
         SetWindowPosition(0, 0);
     }
     SetTargetFPS(wc.targetFps);
+    LoadUiFont();
 
     GameWorld gameWorld = LoadGameWorld();
 
@@ -54,6 +56,7 @@ int main() {
     }
 
     UnloadGameWorld(gameWorld);
+    UnloadUiFont();
     CloseWindow();
 
     return 0;

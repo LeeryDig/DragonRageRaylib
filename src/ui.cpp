@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "ui.hpp"
 
 namespace UI {
@@ -13,10 +14,10 @@ Color GetButtonColor(bool hovered, bool enabled) {
 }
 
 void DrawCenteredText(const std::string& text, Rectangle bounds, int fontSize, Color color) {
-    int textWidth = MeasureText(text.c_str(), fontSize);
+    int textWidth = MeasureUiText(text.c_str(), fontSize);
     int textX = static_cast<int>(bounds.x + (bounds.width - textWidth) * 0.5f);
     int textY = static_cast<int>(bounds.y + (bounds.height - fontSize) * 0.5f);
-    DrawText(text.c_str(), textX, textY, fontSize, color);
+    DrawUiText(text.c_str(), textX, textY, fontSize, color);
 }
 
 }  // namespace
@@ -85,8 +86,8 @@ ModalResult DrawConfirmationDialog(
     DrawRectangleRounded(panel, 0.08f, 10, RAYWHITE);
     DrawRectangleRoundedLinesEx(panel, 0.08f, 10, 2.0f, DARKGRAY);
 
-    DrawText(dialog.title.c_str(), static_cast<int>(panel.x) + 24, static_cast<int>(panel.y) + 24, 30, BLACK);
-    DrawText(dialog.message.c_str(), static_cast<int>(panel.x) + 24, static_cast<int>(panel.y) + 82, 24, DARKGRAY);
+    DrawUiText(dialog.title.c_str(), static_cast<int>(panel.x) + 24, static_cast<int>(panel.y) + 24, 30, BLACK);
+    DrawUiText(dialog.message.c_str(), static_cast<int>(panel.x) + 24, static_cast<int>(panel.y) + 82, 24, DARKGRAY);
 
     if (dialog.ignoreClickUntilRelease && !IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
         dialog.ignoreClickUntilRelease = false;

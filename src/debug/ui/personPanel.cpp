@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <raylib.h>
+
+#include "uiText.hpp"
 #include <raymath.h>
 
 #include "debug/ui/debugWidgets.hpp"
@@ -16,7 +18,7 @@ constexpr int   BASE_FIELD  = 1000;
 
 void DrawSectionHeader(float x, float& y, float width, const char* label) {
     DrawRectangle(static_cast<int>(x), static_cast<int>(y), static_cast<int>(width), 22, Color{50, 54, 65, 255});
-    DrawText(label, static_cast<int>(x + 10.0f), static_cast<int>(y + 4.0f), 15, Color{180, 190, 210, 255});
+    DrawUiText(label, static_cast<int>(x + 10.0f), static_cast<int>(y + 4.0f), 15, Color{180, 190, 210, 255});
     y += 26.0f;
 }
 
@@ -36,8 +38,8 @@ bool DrawToggle(float x, float& y, float width, const char* label, bool& value) 
     Color boxColor = value ? Color{80, 140, 80, 255} : Color{60, 60, 68, 255};
     DrawRectangle(static_cast<int>(rect.x + 6.0f), static_cast<int>(rect.y + 5.0f), 14, 14, boxColor);
     DrawRectangleLines(static_cast<int>(rect.x + 6.0f), static_cast<int>(rect.y + 5.0f), 14, 14, Color{100, 100, 110, 255});
-    if (value) DrawText("x", static_cast<int>(rect.x + 9.0f), static_cast<int>(rect.y + 4.0f), 16, RAYWHITE);
-    DrawText(label, static_cast<int>(rect.x + 28.0f), static_cast<int>(rect.y + 6.0f), 16, RAYWHITE);
+    if (value) DrawUiText("x", static_cast<int>(rect.x + 9.0f), static_cast<int>(rect.y + 4.0f), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(rect.x + 28.0f), static_cast<int>(rect.y + 6.0f), 16, RAYWHITE);
     y += ROW_H;
     return clicked;
 }
@@ -158,7 +160,7 @@ void DrawPersonPanel(GameWorld& gameWorld) {
 
     DrawRectangleRec(panel, Color{24, 24, 30, 235});
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
-    DrawText("Person", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
+    DrawUiText("Person", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
     const char* tabs[] = {"Movement", "Smoking"};
     for (int i = 0; i < 2; ++i) {
@@ -167,7 +169,7 @@ void DrawPersonPanel(GameWorld& gameWorld) {
         bool hovered = CheckCollisionPointRec(GetMousePosition(), tab);
         DrawRectangleRec(tab, active ? Color{78, 92, 120, 255} : (hovered ? Color{64, 64, 72, 255} : Color{42, 42, 48, 255}));
         DrawRectangleLinesEx(tab, 1.0f, Color{85, 85, 95, 255});
-        DrawText(tabs[i], static_cast<int>(tab.x + 8.0f), static_cast<int>(tab.y + 6.0f), 14, RAYWHITE);
+        DrawUiText(tabs[i], static_cast<int>(tab.x + 8.0f), static_cast<int>(tab.y + 6.0f), 14, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.personPanelTab    = i;
             gameWorld.debugUi.personPanelScroll = 0;

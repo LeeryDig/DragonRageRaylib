@@ -4,6 +4,7 @@
 
 #include "debug/debugIcons.hpp"
 #include "debug/ui/personPanel.hpp"
+#include "gameplay/props.hpp"
 #include "particles/particleSystem.hpp"
 #include "smoking/smokingUi.hpp"
 
@@ -20,6 +21,7 @@ void DrawGameplay(GameWorld& gameWorld) {
     UpdateFogShader(gameWorld.render.fogShader, gameWorld.world.runtimeConfig.fog, gameWorld.render.camera);
     UpdateLightingShader(gameWorld.render.fogShader, gameWorld.world.runtimeConfig.lighting);
     DrawLevel(gameWorld.world.level);
+    DrawRuntimeProps(gameWorld.world.props);
     DrawEntityCharacters(gameWorld.npcs);
     if (gameWorld.debugUi.showForces) {
         DrawLevelCollidersDebug(gameWorld.world.level);

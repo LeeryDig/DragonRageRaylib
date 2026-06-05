@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "debug/levelDebugDraw.hpp"
 
 #include <algorithm>
@@ -124,8 +125,8 @@ void DrawDebugAxisGizmo(const Camera& camera) {
         DrawLineEx(center, axis.screenEnd, 3.0f, axis.color);
         DrawCircleV(axis.screenEnd, headRadius, axis.color);
         DrawCircleLines(static_cast<int>(axis.screenEnd.x), static_cast<int>(axis.screenEnd.y), headRadius, Color{230, 230, 230, 180});
-        int textWidth = MeasureText(axis.label, 14);
-        DrawText(
+        int textWidth = MeasureUiText(axis.label, 14);
+        DrawUiText(
             axis.label,
             static_cast<int>(axis.screenEnd.x - textWidth * 0.5f),
             static_cast<int>(axis.screenEnd.y - 7.0f),

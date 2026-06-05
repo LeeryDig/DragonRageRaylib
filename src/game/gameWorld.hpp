@@ -15,6 +15,7 @@
 #include "level/levelData.hpp"
 #include "level/levelsConfig.hpp"
 #include "level/levelRuntimeConfig.hpp"
+#include "gameplay/props.hpp"
 #include "gameplay/smoking/smokingConfig.hpp"
 #include "gameplay/smoking/smokingState.hpp"
 #include "particles/particleSystem.hpp"
@@ -75,6 +76,7 @@ struct DebugUiState {
 
 struct WorldContext {
     StaticWorld statics;
+    std::vector<RuntimeProp> props;
     LevelsConfig levelsConfig;
     LevelData level;
     int currentLevelConfigIndex;

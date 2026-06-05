@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "debug/ui/debugUi.hpp"
 
 #include <cstdio>
@@ -31,13 +32,13 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
 
     bool dirty = gameWorld.debugUi.configDirty;
     const char* saveLabel = dirty ? "Save *" : "Save";
-    int saveWidth = MeasureText(saveLabel, 18) + 24;
+    int saveWidth = MeasureUiText(saveLabel, 18) + 24;
     Rectangle saveRect = Rectangle{10.0f, 5.0f, static_cast<float>(saveWidth), 24.0f};
     bool saveHovered = CheckCollisionPointRec(mouse, saveRect);
     Color saveBg = dirty ? (saveHovered ? Color{180, 120, 20, 255} : Color{140, 90, 10, 255}) : (saveHovered ? Color{62, 62, 70, 255} : Color{42, 42, 48, 255});
     Color saveText = dirty ? YELLOW : LIGHTGRAY;
     DrawRectangleRec(saveRect, saveBg);
-    DrawText(saveLabel, static_cast<int>(saveRect.x + 12.0f), 8, 18, saveText);
+    DrawUiText(saveLabel, static_cast<int>(saveRect.x + 12.0f), 8, 18, saveText);
     if (saveHovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         if (actions.saveLevelRuntimeConfig) actions.saveLevelRuntimeConfig(gameWorld);
     }
@@ -46,7 +47,7 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
     int menuX[6] = {};
     int x = saveWidth + 18;
     for (int i = 0; i < 6; ++i) {
-        int width = MeasureText(items[i], 20) + 28;
+        int width = MeasureUiText(items[i], 20) + 28;
         menuX[i] = x;
         Rectangle rect = Rectangle{static_cast<float>(x), 5.0f, static_cast<float>(width), 24.0f};
         bool hovered = CheckCollisionPointRec(mouse, rect);
@@ -54,7 +55,7 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
             gameWorld.debugUi.activeMenu = gameWorld.debugUi.activeMenu == i ? -1 : i;
         }
         DrawRectangleRec(rect, hovered || gameWorld.debugUi.activeMenu == i ? Color{62, 62, 70, 255} : Color{42, 42, 48, 255});
-        DrawText(items[i], x + 14, 8, 20, RAYWHITE);
+        DrawUiText(items[i], x + 14, 8, 20, RAYWHITE);
         x += width + 6;
     }
 
@@ -111,8 +112,8 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         }
     }
 
-    DrawText(TextFormat("Cam %.2f %.2f %.2f", gameWorld.render.camera.position.x, gameWorld.render.camera.position.y, gameWorld.render.camera.position.z), GetScreenWidth() - 610, 9, 16, LIGHTGRAY);
-    DrawText("F1 close menu | Hold RMB + WASD/Q/Z to fly", GetScreenWidth() - 420, 9, 16, LIGHTGRAY);
+    DrawUiText(TextFormat("Cam %.2f %.2f %.2f", gameWorld.render.camera.position.x, gameWorld.render.camera.position.y, gameWorld.render.camera.position.z), GetScreenWidth() - 610, 9, 16, LIGHTGRAY);
+    DrawUiText("F1 close menu | Hold RMB + WASD/Q/Z to fly", GetScreenWidth() - 420, 9, 16, LIGHTGRAY);
 }
 
 }  // namespace debug_ui

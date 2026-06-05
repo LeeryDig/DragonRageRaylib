@@ -5,12 +5,15 @@
 #include <string>
 
 #include <raylib.h>
+
+#include "uiText.hpp"
 #include <raymath.h>
 
 #include "debug/debugIcons.hpp"
 #include "debug/levelDebugDraw.hpp"
 #include "debug/ui/debugUi.hpp"
 #include "game/gameWorld.hpp"
+#include "gameplay/props.hpp"
 #include "gameplay/smoking/smokingConfig.hpp"
 #include "entity/entityRegistry.hpp"
 #include "gameplay/worldActions.hpp"
@@ -45,9 +48,9 @@ bool DebugMenuItem(Rectangle rect, const char* text, bool enabled = true, bool c
     DrawRectangleRec(rect, hovered ? Color{70, 70, 78, 255} : Color{42, 42, 48, 245});
     DrawRectangleLinesEx(rect, 1.0f, Color{78, 78, 86, 255});
     if (checked) {
-        DrawText("✓", static_cast<int>(rect.x + 8), static_cast<int>(rect.y + 5), 18, RAYWHITE);
+        DrawUiText("✓", static_cast<int>(rect.x + 8), static_cast<int>(rect.y + 5), 18, RAYWHITE);
     }
-    DrawText(text, static_cast<int>(rect.x + 28), static_cast<int>(rect.y + 6), 18, enabled ? RAYWHITE : GRAY);
+    DrawUiText(text, static_cast<int>(rect.x + 28), static_cast<int>(rect.y + 6), 18, enabled ? RAYWHITE : GRAY);
     return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
@@ -56,8 +59,8 @@ bool DebugButton(Rectangle rect, const char* text) {
     bool hovered = CheckCollisionPointRec(mouse, rect);
     DrawRectangleRec(rect, hovered ? Color{78, 78, 88, 255} : Color{56, 56, 64, 255});
     DrawRectangleLinesEx(rect, 1.0f, Color{95, 95, 105, 255});
-    int textWidth = MeasureText(text, 16);
-    DrawText(text,
+    int textWidth = MeasureUiText(text, 16);
+    DrawUiText(text,
         static_cast<int>(rect.x + rect.width * 0.5f - textWidth * 0.5f),
         static_cast<int>(rect.y + 6), 16, RAYWHITE);
     return hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
@@ -74,12 +77,12 @@ bool DebugFloatSlider(Rectangle rect, const char* label, float& value, float min
         changed = true;
     }
     float normalized = Clamp((value - minValue) / (maxValue - minValue), 0.0f, 1.0f);
-    DrawText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 2), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 2), 16, RAYWHITE);
     DrawRectangleRec(bar, Color{55, 55, 62, 255});
     DrawRectangleRec(Rectangle{bar.x, bar.y, bar.width * normalized, bar.height}, Color{90, 130, 210, 255});
     DrawCircle(static_cast<int>(bar.x + bar.width * normalized),
         static_cast<int>(bar.y + bar.height * 0.5f), 6.0f, RAYWHITE);
-    DrawText(TextFormat("%.3f", value),
+    DrawUiText(TextFormat("%.3f", value),
         static_cast<int>(rect.x + rect.width - 70.0f), static_cast<int>(rect.y + 2), 16, LIGHTGRAY);
     return changed;
 }
@@ -92,12 +95,12 @@ bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fi
     }
     bool active = ui.activeTextField == fieldId;
     bool changed = false;
-    DrawText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 5), 16, RAYWHITE);
+    DrawUiText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 5), 16, RAYWHITE);
     Rectangle inputRect = Rectangle{rect.x + 24.0f, rect.y, rect.width - 24.0f, rect.height};
     DrawRectangleRec(inputRect, active ? Color{46, 56, 72, 255} : Color{36, 36, 42, 255});
     DrawRectangleLinesEx(inputRect, 1.0f,
         active ? Color{120, 150, 220, 255} : Color{85, 85, 95, 255});
-    DrawText(text.c_str(),
+    DrawUiText(text.c_str(),
         static_cast<int>(inputRect.x + 6.0f), static_cast<int>(inputRect.y + 5.0f), 16, RAYWHITE);
     if (active) {
         int key = GetCharPressed();
@@ -123,7 +126,7 @@ bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fi
 }
 
 void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
-    DrawText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z),
+    DrawUiText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z),
         static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
 }
 
@@ -154,10 +157,10 @@ bool BeginDebugPanel(DebugUiState& ui, int panelId, Vector2& position, bool& pin
     DrawRectangleRec(panelRect, Color{28, 28, 32, 220});
     DrawRectangleRec(titleRect, Color{42, 42, 48, 245});
     DrawRectangleLinesEx(panelRect, 1.0f, Color{80, 80, 88, 255});
-    DrawText(title, static_cast<int>(position.x + 12.0f), static_cast<int>(position.y + 6.0f), 18, RAYWHITE);
+    DrawUiText(title, static_cast<int>(position.x + 12.0f), static_cast<int>(position.y + 6.0f), 18, RAYWHITE);
     DrawRectangleRec(pinRect, pinned ? Color{80, 120, 80, 255} : Color{65, 65, 72, 255});
     DrawRectangleLinesEx(pinRect, 1.0f, Color{95, 95, 105, 255});
-    DrawText("P", static_cast<int>(pinRect.x + 6.0f), static_cast<int>(pinRect.y + 2.0f), 16, RAYWHITE);
+    DrawUiText("P", static_cast<int>(pinRect.x + 6.0f), static_cast<int>(pinRect.y + 2.0f), 16, RAYWHITE);
     return true;
 }
 
@@ -195,6 +198,8 @@ int CharacterPartSelectionId(int characterIndex, int kind, int partIndex) {
 }
 int LightSelectionId(int index) { return -300000 - index; }
 int LightIndexFromSelection(int selection) { return -300000 - selection; }
+int PropSelectionId(int index) { return -400000 - index; }
+int PropIndexFromSelection(int selection) { return -400000 - selection; }
 
 bool DecodeCharacterPartSelection(int selection, int& characterIndex, int& kind, int& partIndex) {
     if (selection > -200000) return false;
@@ -263,7 +268,36 @@ void AddDebugLight(GameWorld& gameWorld, LightType type) {
     gameWorld.debugUi.configDirty = true;
 }
 
+void AddDebugProp(GameWorld& gameWorld, const PropLibraryItem& item) {
+    Vector3 forward = CameraForward(gameWorld.render.camera);
+    LevelPropConfig prop;
+    prop.id = TextFormat("prop_%02d", static_cast<int>(gameWorld.world.runtimeConfig.props.size()) + 1);
+    prop.modelPath = item.path;
+    prop.position = Vector3Add(gameWorld.render.camera.position, Vector3Scale(forward, 6.0f));
+    prop.rotation = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+    prop.scale = Vector3{1.0f, 1.0f, 1.0f};
+    gameWorld.world.runtimeConfig.props.push_back(prop);
+    LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+    int index = static_cast<int>(gameWorld.world.runtimeConfig.props.size()) - 1;
+    gameWorld.debugUi.selectedLevelNode = PropSelectionId(index);
+    SetVectorInput(gameWorld.debugUi.levelPositionInput, prop.position);
+    SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(prop.rotation));
+    SetVectorInput(gameWorld.debugUi.levelScaleInput, prop.scale);
+    gameWorld.debugUi.levelSidebarOpen = true;
+    gameWorld.debugUi.configDirty = true;
+}
+
 void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
+    if (gameWorld.debugUi.selectedLevelNode <= -400000) {
+        int propIndex = PropIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (propIndex < 0 || propIndex >= static_cast<int>(gameWorld.world.props.size())) return;
+        gameWorld.world.runtimeConfig.props.erase(gameWorld.world.runtimeConfig.props.begin() + propIndex);
+        UnloadRuntimeProps(gameWorld.world.props);
+        LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+        gameWorld.debugUi.selectedLevelNode = -1;
+        gameWorld.debugUi.configDirty = true;
+        return;
+    }
     if (gameWorld.debugUi.selectedLevelNode <= -300000) {
         int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
         if (lightIndex < 0 || lightIndex >= static_cast<int>(
@@ -325,6 +359,16 @@ bool GetSelectedTransform(GameWorld& gameWorld, Vector3& position, Quaternion& r
         saveToLevelConfig = true;
         return true;
     }
+    if (gameWorld.debugUi.selectedLevelNode <= -400000) {
+        int propIndex = PropIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (propIndex < 0 || propIndex >= static_cast<int>(gameWorld.world.props.size())) return false;
+        const RuntimeProp& prop = gameWorld.world.props[propIndex];
+        position = prop.config.position;
+        rotation = prop.config.rotation;
+        scale = prop.config.scale;
+        saveToLevelConfig = true;
+        return true;
+    }
     if (gameWorld.debugUi.selectedLevelNode <= -300000) {
         int lightIndex = LightIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
         if (lightIndex < 0 || lightIndex >= static_cast<int>(
@@ -357,6 +401,16 @@ void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rot
             gameWorld.npcs.characters.size())) {
             ApplyCharacterRootTransform(
                 gameWorld.npcs.characters[characterIndex], position, rotation);
+            gameWorld.debugUi.configDirty = true;
+        }
+    } else if (gameWorld.debugUi.selectedLevelNode <= -400000) {
+        int propIndex = PropIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (propIndex >= 0 && propIndex < static_cast<int>(gameWorld.world.props.size())) {
+            RuntimeProp& prop = gameWorld.world.props[propIndex];
+            prop.config.position = position;
+            prop.config.rotation = rotation;
+            prop.config.scale = scale;
+            gameWorld.world.runtimeConfig.props[propIndex] = prop.config;
             gameWorld.debugUi.configDirty = true;
         }
     } else if (gameWorld.debugUi.selectedLevelNode <= -300000) {
@@ -423,7 +477,7 @@ void DrawTransformGizmo(GameWorld& gameWorld) {
     for (int i = 0; i < 3; ++i) {
         Vector3 axis = gameWorld.debugUi.transformGizmoMode == 2
             ? Vector3RotateByQuaternion(axes[i], rotation) : axes[i];
-        Vector3 end = Vector3Add(position, Vector3Scale(axis, 1.6f));
+        Vector3 end = Vector3Add(position, Vector3Scale(axis, 1.0f));
         DrawLine3D(position, end, colors[i]);
         DrawSphere(end, 0.08f, colors[i]);
         Vector2 screenEnd = GetWorldToScreen(end, gameWorld.render.camera);
@@ -465,6 +519,11 @@ void DrawTransformGizmo(GameWorld& gameWorld) {
     } else if (gameWorld.debugUi.transformGizmoMode == 2) {
         Quaternion deltaRotation = QuaternionFromAxisAngle(axis, mouseAlongAxis * 0.01f);
         rotation = QuaternionNormalize(QuaternionMultiply(deltaRotation, rotation));
+    } else if (gameWorld.debugUi.transformGizmoMode == 3) {
+        float deltaScale = mouseAlongAxis * 0.01f;
+        if (axisIndex == 0) scale.x = std::max(0.01f, scale.x + deltaScale);
+        if (axisIndex == 1) scale.y = std::max(0.01f, scale.y + deltaScale);
+        if (axisIndex == 2) scale.z = std::max(0.01f, scale.z + deltaScale);
     }
     SetSelectedTransform(gameWorld, position, rotation, scale);
 }
@@ -492,7 +551,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
     DrawRectangleRec(panel, Color{24, 24, 30, 235});
     DrawRectangleLinesEx(panel, 1.0f, Color{80, 80, 88, 255});
     gameWorld.debugUi.levelSidebarTab = 0;
-    DrawText("Inspector", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
+    DrawUiText("Inspector", static_cast<int>(x + 14.0f), 44, 20, RAYWHITE);
 
     const char* tabs[] = {"ROOT"};
     for (int i = 0; i < 1; ++i) {
@@ -502,7 +561,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         DrawRectangleRec(tab,
             active ? Color{78, 92, 120, 255} : hovered ? Color{64, 64, 72, 255} : Color{42, 42, 48, 255});
         DrawRectangleLinesEx(tab, 1.0f, Color{85, 85, 95, 255});
-        DrawText(tabs[i], static_cast<int>(tab.x + 5.0f), static_cast<int>(tab.y + 6.0f), 13, RAYWHITE);
+        DrawUiText(tabs[i], static_cast<int>(tab.x + 5.0f), static_cast<int>(tab.y + 6.0f), 13, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.levelSidebarTab = i;
             gameWorld.debugUi.levelSidebarScroll = 0;
@@ -517,7 +576,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         DrawRectangleRec(rootRow,
             selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
         std::string levelName = DisplayNameFromPath(gameWorld.world.level.name);
-        DrawText(TextFormat("LEVEL %s", levelName.c_str()),
+        DrawUiText(TextFormat("LEVEL %s", levelName.c_str()),
             static_cast<int>(rootRow.x + 6.0f), static_cast<int>(rootRow.y + 5.0f), 14, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.selectedLevelNode = -2;
@@ -535,13 +594,31 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             DrawRectangleRec(row,
                 selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
             std::string characterName = DisplayNameFromPath(character.modelPath);
-            DrawText(TextFormat("CHAR %s", characterName.c_str()),
+            DrawUiText(TextFormat("CHAR %s", characterName.c_str()),
                 static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
             if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 gameWorld.debugUi.selectedLevelNode = selectionId;
                 SetVectorInput(gameWorld.debugUi.levelPositionInput, character.rootPosition);
                 SetVectorInput(gameWorld.debugUi.levelRotationInput,
                     EulerDegreesFromQuaternion(character.rootRotation));
+            }
+            rootY += 28.0f;
+        }
+        for (std::size_t p = 0; p < gameWorld.world.props.size(); ++p) {
+            const RuntimeProp& prop = gameWorld.world.props[p];
+            Rectangle row = Rectangle{x + 12.0f, rootY, width - 24.0f, 24.0f};
+            int selectionId = PropSelectionId(static_cast<int>(p));
+            selected = gameWorld.debugUi.selectedLevelNode == selectionId;
+            hovered = CheckCollisionPointRec(GetMousePosition(), row);
+            DrawRectangleRec(row,
+                selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
+            DrawUiText(TextFormat("PROP %s", prop.config.id.c_str()),
+                static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
+            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                gameWorld.debugUi.selectedLevelNode = selectionId;
+                SetVectorInput(gameWorld.debugUi.levelPositionInput, prop.config.position);
+                SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(prop.config.rotation));
+                SetVectorInput(gameWorld.debugUi.levelScaleInput, prop.config.scale);
             }
             rootY += 28.0f;
         }
@@ -553,7 +630,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             hovered = CheckCollisionPointRec(GetMousePosition(), row);
             DrawRectangleRec(row,
                 selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
-            DrawText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)),
+            DrawUiText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)),
                 static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
             if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
                 gameWorld.debugUi.selectedLevelNode = selectionId;
@@ -602,7 +679,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         DrawRectangleRec(row,
             selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
         std::string nodeName = DisplayNameFromPath(node.name);
-        DrawText(TextFormat("LEVEL %s", nodeName.c_str()),
+        DrawUiText(TextFormat("LEVEL %s", nodeName.c_str()),
             static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
         if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
             gameWorld.debugUi.selectedLevelNode = static_cast<int>(i);
@@ -624,7 +701,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                     selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255}
                              : Color{34, 34, 40, 255});
                 std::string characterName = DisplayNameFromPath(character.modelPath);
-                DrawText(TextFormat("CHAR %s/%s",
+                DrawUiText(TextFormat("CHAR %s/%s",
                     characterName.c_str(), character.visualParts[p].name.c_str()),
                     static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
@@ -643,7 +720,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                     selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255}
                              : Color{34, 34, 40, 255});
                 std::string characterName = DisplayNameFromPath(character.modelPath);
-                DrawText(TextFormat("CHAR %s/%s",
+                DrawUiText(TextFormat("CHAR %s/%s",
                     characterName.c_str(), character.colliders[p].name.c_str()),
                     static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
@@ -662,7 +739,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                     selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255}
                              : Color{34, 34, 40, 255});
                 std::string characterName = DisplayNameFromPath(character.modelPath);
-                DrawText(TextFormat("CHAR %s/%s",
+                DrawUiText(TextFormat("CHAR %s/%s",
                     characterName.c_str(), character.iconParts[p].name.c_str()),
                     static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 4.0f), 14, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
@@ -671,28 +748,30 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             }
         }
     }
-    DrawText(TextFormat("%d items", matchingCount),
+    DrawUiText(TextFormat("%d items", matchingCount),
         static_cast<int>(x + 14.0f), static_cast<int>(listY + visibleRows * rowH + 4.0f), 14, GRAY);
 
     float editY = listY + visibleRows * rowH + 24.0f;
     if (gameWorld.debugUi.selectedLevelNode == -2
         || (gameWorld.debugUi.selectedLevelNode <= -1000
-            && gameWorld.debugUi.selectedLevelNode > -200000)) {
+            && gameWorld.debugUi.selectedLevelNode > -200000)
+        || gameWorld.debugUi.selectedLevelNode <= -400000) {
         bool editingCharacter = gameWorld.debugUi.selectedLevelNode <= -1000
             && gameWorld.debugUi.selectedLevelNode > -200000;
-        DrawText(editingCharacter ? "CHARACTER ROOT" : "LEVEL ROOT",
+        bool editingProp = gameWorld.debugUi.selectedLevelNode <= -400000;
+        DrawUiText(editingProp ? "PROP ROOT" : editingCharacter ? "CHARACTER ROOT" : "LEVEL ROOT",
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
-        DrawText("Move/rotate GLB inteiro. Scale fica para depois.",
+        DrawUiText("Move/rotate/scale root inteiro.",
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE); editY += 26.0f;
 
         bool changed = false;
-        DrawText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+        DrawUiText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelPositionInput[0], 401, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelPositionInput[1], 402, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelPositionInput[2], 403, gameWorld.debugUi) || changed;
         editY += 34.0f;
 
-        DrawText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+        DrawUiText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelRotationInput[0], 404, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 405, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 406, gameWorld.debugUi) || changed;
@@ -701,6 +780,8 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 1 ? 0 : 1;
         if (DebugButton(Rectangle{x + 120.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 2 ? "Rotate ON" : "Rotate"))
             gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 2 ? 0 : 2;
+        if (DebugButton(Rectangle{x + 226.0f, editY, 96.0f, 24.0f}, gameWorld.debugUi.transformGizmoMode == 3 ? "Scale ON" : "Scale"))
+            gameWorld.debugUi.transformGizmoMode = gameWorld.debugUi.transformGizmoMode == 3 ? 0 : 3;
         editY += 34.0f;
 
         if (changed) {
@@ -708,7 +789,11 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             Vector3 rotationDegrees = Vector3Zero();
             if (ParseVectorInput(gameWorld.debugUi.levelPositionInput, position)
                 && ParseVectorInput(gameWorld.debugUi.levelRotationInput, rotationDegrees)) {
-                if (editingCharacter) {
+                if (editingProp) {
+                    Vector3 scale = Vector3{1.0f, 1.0f, 1.0f};
+                    ParseVectorInput(gameWorld.debugUi.levelScaleInput, scale);
+                    SetSelectedTransform(gameWorld, position, QuaternionFromEulerDegrees(rotationDegrees), scale);
+                } else if (editingCharacter) {
                     int characterIndex = CharacterIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
                     if (characterIndex >= 0 && characterIndex < static_cast<int>(
                         gameWorld.npcs.characters.size())) {
@@ -753,7 +838,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             DrawRectangleLinesEx(deleteRect, 1.0f, Color{190, 90, 75, 255});
             DrawDebugIcon2D(gameWorld.render.debugIcons, "delete",
                 Vector2{deleteRect.x + 8.0f, deleteRect.y + 2.0f}, 22.0f, ORANGE);
-            DrawText("Delete",
+            DrawUiText("Delete",
                 static_cast<int>(deleteRect.x + 34.0f), static_cast<int>(deleteRect.y + 6.0f),
                 14, RAYWHITE);
             if (CheckCollisionPointRec(GetMousePosition(), deleteRect)
@@ -770,7 +855,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 DrawRectangleRec(tab,
                     active ? Color{78, 92, 120, 255} : hovered ? Color{64, 64, 72, 255}
                            : Color{42, 42, 48, 255});
-                DrawText(detailTabs[i],
+                DrawUiText(detailTabs[i],
                     static_cast<int>(tab.x + 4.0f), static_cast<int>(tab.y + 6.0f), 12, RAYWHITE);
                 if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
                     gameWorld.debugUi.inspectorDetailTab = i;
@@ -784,20 +869,20 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 if (gameWorld.debugUi.inspectorDetailTab == 0) {
                     for (std::size_t i = 0; i < character.visualParts.size() && editY < h - 24.0f;
                          ++i, editY += 20.0f)
-                        DrawText(character.visualParts[i].name.c_str(),
+                        DrawUiText(character.visualParts[i].name.c_str(),
                             static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
                 } else if (gameWorld.debugUi.inspectorDetailTab == 1) {
                     for (std::size_t i = 0; i < character.colliders.size() && editY < h - 24.0f;
                          ++i, editY += 20.0f)
-                        DrawText(character.colliders[i].name.c_str(),
+                        DrawUiText(character.colliders[i].name.c_str(),
                             static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
                 } else if (gameWorld.debugUi.inspectorDetailTab == 2) {
                     for (std::size_t i = 0; i < character.iconParts.size() && editY < h - 24.0f;
                          ++i, editY += 20.0f)
-                        DrawText(character.iconParts[i].name.c_str(),
+                        DrawUiText(character.iconParts[i].name.c_str(),
                             static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, LIGHTGRAY);
                 } else {
-                    DrawText("Sem dados nesta aba para CHAR.",
+                    DrawUiText("Sem dados nesta aba para CHAR.",
                         static_cast<int>(x + 18.0f), static_cast<int>(editY), 13, GRAY);
                 }
             }
@@ -810,9 +895,9 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             gameWorld.world.runtimeConfig.lighting.lights.size())) {
             LevelLightConfig& light =
                 gameWorld.world.runtimeConfig.lighting.lights[lightIndex];
-            DrawText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)),
+            DrawUiText(TextFormat("LIGHT %s [%s]", light.id.c_str(), LightTypeName(light.type)),
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
-            DrawText("Directional usa rotation: forward local -Z.",
+            DrawUiText("Directional usa rotation: forward local -Z.",
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE); editY += 26.0f;
 
             bool changed = false;
@@ -828,13 +913,13 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             }
             editY += 34.0f;
 
-            DrawText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+            DrawUiText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
             changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelPositionInput[0], 501, gameWorld.debugUi) || changed;
             changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelPositionInput[1], 502, gameWorld.debugUi) || changed;
             changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelPositionInput[2], 503, gameWorld.debugUi) || changed;
             editY += 34.0f;
 
-            DrawText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+            DrawUiText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
             changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelRotationInput[0], 504, gameWorld.debugUi) || changed;
             changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 505, gameWorld.debugUi) || changed;
             changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 506, gameWorld.debugUi) || changed;
@@ -896,7 +981,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             DrawRectangleLinesEx(deleteRect, 1.0f, Color{190, 90, 75, 255});
             DrawDebugIcon2D(gameWorld.render.debugIcons, "delete",
                 Vector2{deleteRect.x + 8.0f, deleteRect.y + 2.0f}, 22.0f, ORANGE);
-            DrawText("Delete",
+            DrawUiText("Delete",
                 static_cast<int>(deleteRect.x + 34.0f), static_cast<int>(deleteRect.y + 6.0f),
                 14, RAYWHITE);
             if (CheckCollisionPointRec(GetMousePosition(), deleteRect)
@@ -929,11 +1014,11 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 && selectedCharacterPartIndex < static_cast<int>(character.iconParts.size()))
                 partName = character.iconParts[selectedCharacterPartIndex].name.c_str();
             std::string characterName = DisplayNameFromPath(character.modelPath);
-            DrawText(TextFormat("CHAR %s", characterName.c_str()),
+            DrawUiText(TextFormat("CHAR %s", characterName.c_str()),
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
-            DrawText(TextFormat("%s %s", kindName, partName),
+            DrawUiText(TextFormat("%s %s", kindName, partName),
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, LIGHTGRAY); editY += 22.0f;
-            DrawText("Part read-only. Use ROOT/CHAR to move whole GLB.",
+            DrawUiText("Part read-only. Use ROOT/CHAR to move whole GLB.",
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE);
         }
     }
@@ -942,24 +1027,24 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         && gameWorld.debugUi.selectedLevelNode < static_cast<int>(gameWorld.world.level.debugNodes.size())) {
         const LevelDebugNode& node = gameWorld.world.level.debugNodes[gameWorld.debugUi.selectedLevelNode];
         std::string nodeName = DisplayNameFromPath(node.name);
-        DrawText(nodeName.c_str(),
+        DrawUiText(nodeName.c_str(),
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
-        DrawText(LevelDebugNodeKindName(node.kind),
+        DrawUiText(LevelDebugNodeKindName(node.kind),
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, GRAY); editY += 24.0f;
         if (node.kind == LevelDebugNodeKind::Visual) {
-            DrawText("VISUAL read-only: level render voltou para DrawModel().",
+            DrawUiText("VISUAL read-only: level render voltou para DrawModel().",
                 static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE);
             editY += 22.0f;
         }
 
-        DrawText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+        DrawUiText("Position", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         bool changed = false;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelPositionInput[0], 301, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelPositionInput[1], 302, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelPositionInput[2], 303, gameWorld.debugUi) || changed;
         editY += 34.0f;
 
-        DrawText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+        DrawUiText("Rotation", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelRotationInput[0], 304, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelRotationInput[1], 305, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelRotationInput[2], 306, gameWorld.debugUi) || changed;
@@ -974,7 +1059,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                 gameWorld.debugUi.transformGizmoMode == 2 ? 0 : 2;
         editY += 34.0f;
 
-        DrawText("Scale", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
+        DrawUiText("Scale", static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, RAYWHITE); editY += 22.0f;
         changed = DebugTextInput(Rectangle{x + 14.0f, editY, 100.0f, 24.0f}, "X", gameWorld.debugUi.levelScaleInput[0], 307, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 124.0f, editY, 100.0f, 24.0f}, "Y", gameWorld.debugUi.levelScaleInput[1], 308, gameWorld.debugUi) || changed;
         changed = DebugTextInput(Rectangle{x + 234.0f, editY, 100.0f, 24.0f}, "Z", gameWorld.debugUi.levelScaleInput[2], 309, gameWorld.debugUi) || changed;
@@ -1007,12 +1092,12 @@ void DrawDebugPanels(GameWorld& gameWorld) {
             "Person Status", 280.0f, 132.0f);
         float speed = Vector3Length(
             Vector3{gameWorld.player.state.velocity.x, 0.0f, gameWorld.player.state.velocity.z});
-        DrawText(TextFormat("Speed: %.2f m/s", speed),
+        DrawUiText(TextFormat("Speed: %.2f m/s", speed),
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 44), 18, RAYWHITE);
-        DrawText(gameWorld.player.state.grounded ? "Grounded" : "Airborne",
+        DrawUiText(gameWorld.player.state.grounded ? "Grounded" : "Airborne",
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 68),
             18, gameWorld.player.state.grounded ? GREEN : RED);
-        DrawText(TextFormat("Pos: %.1f %.1f %.1f",
+        DrawUiText(TextFormat("Pos: %.1f %.1f %.1f",
             gameWorld.player.state.position.x, gameWorld.player.state.position.y,
             gameWorld.player.state.position.z),
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 92), 18, RAYWHITE);
@@ -1022,7 +1107,7 @@ void DrawDebugPanels(GameWorld& gameWorld) {
         Vector2& pos = gameWorld.debugUi.physicsPanelPos;
         BeginDebugPanel(gameWorld.debugUi, 2, pos, gameWorld.debugUi.pinPhysicsPanel,
             "Physics Panel", 320.0f, 110.0f);
-        DrawText("Physics debug tools coming soon",
+        DrawUiText("Physics debug tools coming soon",
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 50), 18, LIGHTGRAY);
     }
 
@@ -1031,7 +1116,7 @@ void DrawDebugPanels(GameWorld& gameWorld) {
         bool pinned = false;
         BeginDebugPanel(gameWorld.debugUi, 3, pos, pinned,
             "Debug Camera Teleport", 320.0f, 150.0f);
-        DrawText(TextFormat("Camera: %.2f %.2f %.2f",
+        DrawUiText(TextFormat("Camera: %.2f %.2f %.2f",
             gameWorld.render.camera.position.x, gameWorld.render.camera.position.y,
             gameWorld.render.camera.position.z),
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 38), 16, LIGHTGRAY);
@@ -1059,7 +1144,7 @@ void DrawDebugPanels(GameWorld& gameWorld) {
         Vector2& pos = gameWorld.debugUi.gameTeleportPos;
         bool pinned = false;
         BeginDebugPanel(gameWorld.debugUi, 4, pos, pinned, "Game Teleport", 320.0f, 140.0f);
-        DrawText(TextFormat("Person: %.2f %.2f %.2f",
+        DrawUiText(TextFormat("Person: %.2f %.2f %.2f",
             gameWorld.player.state.position.x, gameWorld.player.state.position.y,
             gameWorld.player.state.position.z),
             static_cast<int>(pos.x + 14), static_cast<int>(pos.y + 38), 16, LIGHTGRAY);
@@ -1084,36 +1169,52 @@ void DrawDebugPanels(GameWorld& gameWorld) {
 void DrawDebugAddLightContextMenu(GameWorld& gameWorld) {
     static bool open = false;
     static Vector2 pos = Vector2Zero();
-    float sidebarWidth = gameWorld.debugUi.levelSidebarOpen || gameWorld.debugUi.levelConfigOpen
-        ? 390.0f : 0.0f;
+    static int side = 0;
+    float sidebarWidth = gameWorld.debugUi.levelSidebarOpen || gameWorld.debugUi.levelConfigOpen ? 390.0f : 0.0f;
     Rectangle topBar = Rectangle{0.0f, 0.0f, static_cast<float>(GetScreenWidth()), 34.0f};
-    Rectangle rightPanel = Rectangle{
-        static_cast<float>(GetScreenWidth()) - sidebarWidth, 34.0f,
-        sidebarWidth, static_cast<float>(GetScreenHeight()) - 34.0f};
+    Rectangle rightPanel = Rectangle{static_cast<float>(GetScreenWidth()) - sidebarWidth, 34.0f, sidebarWidth, static_cast<float>(GetScreenHeight()) - 34.0f};
     Vector2 mouse = GetMousePosition();
-    bool overUi = CheckCollisionPointRec(mouse, topBar)
-        || (sidebarWidth > 0.0f && CheckCollisionPointRec(mouse, rightPanel));
-
+    bool overUi = CheckCollisionPointRec(mouse, topBar) || (sidebarWidth > 0.0f && CheckCollisionPointRec(mouse, rightPanel));
     if (gameWorld.debugUi.enabled && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_A) && !overUi) {
         open = true;
-        pos = GetMousePosition();
+        pos = mouse;
+        side = 0;
     }
     if (!open) return;
 
-    Rectangle menu = Rectangle{pos.x, pos.y, 210.0f, 122.0f};
+    Rectangle menu = Rectangle{pos.x, pos.y, 160.0f, 88.0f};
     DrawRectangleRec(menu, Color{32, 32, 38, 245});
     DrawRectangleLinesEx(menu, 1.0f, Color{95, 95, 105, 255});
-    DrawText("Add > Lights", static_cast<int>(menu.x + 10.0f), static_cast<int>(menu.y + 8.0f), 16, YELLOW);
+    DrawUiText("Add", static_cast<int>(menu.x + 10.0f), static_cast<int>(menu.y + 8.0f), 16, YELLOW);
+    Rectangle lights = Rectangle{menu.x + 8.0f, menu.y + 32.0f, menu.width - 16.0f, 24.0f};
+    Rectangle props = Rectangle{menu.x + 8.0f, menu.y + 58.0f, menu.width - 16.0f, 24.0f};
+    if (CheckCollisionPointRec(mouse, lights)) side = 1;
+    if (CheckCollisionPointRec(mouse, props)) side = 2;
+    DebugMenuItem(lights, "Lights >");
+    DebugMenuItem(props, "Props >");
 
-    Rectangle dir   = Rectangle{menu.x + 8.0f, menu.y + 34.0f, menu.width - 16.0f, 26.0f};
-    Rectangle point = Rectangle{menu.x + 8.0f, menu.y + 62.0f, menu.width - 16.0f, 26.0f};
-    Rectangle spot  = Rectangle{menu.x + 8.0f, menu.y + 90.0f, menu.width - 16.0f, 26.0f};
-    if (DebugMenuItem(dir,   "Directional Light")) { AddDebugLight(gameWorld, LightType::Directional); open = false; }
-    if (DebugMenuItem(point, "Point Light"))       { AddDebugLight(gameWorld, LightType::Point);       open = false; }
-    if (DebugMenuItem(spot,  "Spot Light"))        { AddDebugLight(gameWorld, LightType::Spot);        open = false; }
-
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !CheckCollisionPointRec(mouse, menu))
-        open = false;
+    Rectangle sideRect = Rectangle{menu.x + menu.width + 4.0f, menu.y + 32.0f, 230.0f, side == 2 ? 220.0f : 88.0f};
+    bool overSide = false;
+    if (side == 1) {
+        overSide = CheckCollisionPointRec(mouse, sideRect);
+        if (DebugMenuItem(Rectangle{sideRect.x + 8.0f, sideRect.y + 4.0f, sideRect.width - 16.0f, 24.0f}, "Directional Light")) { AddDebugLight(gameWorld, LightType::Directional); open = false; }
+        if (DebugMenuItem(Rectangle{sideRect.x + 8.0f, sideRect.y + 30.0f, sideRect.width - 16.0f, 24.0f}, "Point Light")) { AddDebugLight(gameWorld, LightType::Point); open = false; }
+        if (DebugMenuItem(Rectangle{sideRect.x + 8.0f, sideRect.y + 56.0f, sideRect.width - 16.0f, 24.0f}, "Spot Light")) { AddDebugLight(gameWorld, LightType::Spot); open = false; }
+    } else if (side == 2) {
+        std::vector<PropLibraryItem> items = ScanPropLibrary();
+        int count = std::min(7, static_cast<int>(items.size()));
+        sideRect.height = 10.0f + std::max(1, count) * 26.0f;
+        DrawRectangleRec(sideRect, Color{32, 32, 38, 245});
+        DrawRectangleLinesEx(sideRect, 1.0f, Color{95, 95, 105, 255});
+        overSide = CheckCollisionPointRec(mouse, sideRect);
+        if (items.empty()) {
+            DebugMenuItem(Rectangle{sideRect.x + 8.0f, sideRect.y + 6.0f, sideRect.width - 16.0f, 24.0f}, "(empty)", false);
+        }
+        for (int i = 0; i < count; ++i) {
+            if (DebugMenuItem(Rectangle{sideRect.x + 8.0f, sideRect.y + 6.0f + i * 26.0f, sideRect.width - 16.0f, 24.0f}, items[i].name.c_str())) { AddDebugProp(gameWorld, items[i]); open = false; }
+        }
+    }
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !CheckCollisionPointRec(mouse, menu) && !overSide) open = false;
 }
 
 void DrawDebugLightIcons2D(GameWorld& gameWorld) {

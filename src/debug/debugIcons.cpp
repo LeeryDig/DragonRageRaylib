@@ -1,3 +1,4 @@
+#include "uiText.hpp"
 #include "debug/debugIcons.hpp"
 
 #include <cstring>
@@ -59,7 +60,7 @@ void DrawDebugIcon2D(const DebugIcons& icons, const char* iconName, Vector2 pos,
         DrawTextEx(icons.materialSymbols, glyph, pos, size, 0.0f, color);
         return;
     }
-    DrawText(FallbackLabel(iconName), static_cast<int>(pos.x), static_cast<int>(pos.y), static_cast<int>(size * 0.55f), color);
+    DrawUiText(FallbackLabel(iconName), static_cast<int>(pos.x), static_cast<int>(pos.y), static_cast<int>(size * 0.55f), color);
 }
 
 void DrawDebugIconBillboard(const DebugIcons& icons, const Camera& camera, const char* iconName, Vector3 worldPos, float size, Color color) {

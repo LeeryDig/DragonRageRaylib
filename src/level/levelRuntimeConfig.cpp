@@ -303,6 +303,21 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     }
     EnsureDefaultSun(config.lighting);
 
+    const JsonValue* props = GetMember(root, "props");
+    if (props && props->type == JsonValue::Array) {
+        for (std::size_t i = 0; i < props->arrayValue.size(); ++i) {
+            const JsonValue& item = props->arrayValue[i];
+            if (item.type != JsonValue::Object) continue;
+            LevelPropConfig prop;
+            prop.id = StringMember(item, "id", TextFormat("prop_%02d", static_cast<int>(i) + 1));
+            prop.modelPath = StringMember(item, "model", "");
+            prop.position = Vector3Member(item, "position", prop.position);
+            prop.rotation = QuaternionFromEulerDegrees(Vector3Member(item, "rotation", EulerDegreesFromQuaternion(prop.rotation)));
+            prop.scale = Vector3Member(item, "scale", prop.scale);
+            if (!prop.modelPath.empty()) config.props.push_back(prop);
+        }
+    }
+
     const JsonValue* characters = GetMember(root, "characters");
     if (characters && characters->type == JsonValue::Array) {
         for (std::size_t i = 0; i < characters->arrayValue.size(); ++i) {
@@ -318,12 +333,13 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     }
 
     TraceLog(LOG_INFO,
-        "Level config: loaded %s skybox=%s fog=%s lights=%zu characters=%zu",
+        "Level config: loaded %s skybox=%s fog=%s lights=%zu characters=%zu props=%zu",
         configPath.c_str(),
         config.skyboxPath.empty() ? "(none)" : config.skyboxPath.c_str(),
         config.fog.enabled ? "on" : "off",
         config.lighting.lights.size(),
-        config.characters.size());
+        config.characters.size(),
+        config.props.size());
     return config;
 }
 
@@ -376,6 +392,19 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
     }
     file << "    ]\n";
     file << "  },\n";
+    file << "  \"props\": [\n";
+    for (std::size_t i = 0; i < config.props.size(); ++i) {
+        const LevelPropConfig& prop = config.props[i];
+        Vector3 rotationDegrees = EulerDegreesFromQuaternion(prop.rotation);
+        file << "    {\n";
+        file << "      \"id\": \"" << prop.id << "\",\n";
+        file << "      \"model\": \"" << prop.modelPath << "\",\n";
+        file << "      \"position\": [" << prop.position.x << ", " << prop.position.y << ", " << prop.position.z << "],\n";
+        file << "      \"rotation\": [" << rotationDegrees.x << ", " << rotationDegrees.y << ", " << rotationDegrees.z << "],\n";
+        file << "      \"scale\": [" << prop.scale.x << ", " << prop.scale.y << ", " << prop.scale.z << "]\n";
+        file << "    }" << (i + 1 < config.props.size() ? "," : "") << "\n";
+    }
+    file << "  ],\n";
     file << "  \"characters\": [\n";
     for (std::size_t i = 0; i < config.characters.size(); ++i) {
         const CharacterSpawnConfig& character = config.characters[i];
