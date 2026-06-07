@@ -96,12 +96,34 @@ struct LevelPropConfig {
           scale{1.0f, 1.0f, 1.0f} {}
 };
 
+struct LevelRadioConfig {
+    std::string id;
+    std::string youtubeUrl;
+    Vector3 position;
+    Quaternion rotation;
+    Vector3 scale;
+    float interactionRadius;
+    float audibleRadius;
+    bool autoplay;
+
+    LevelRadioConfig()
+        : id("radio"),
+          youtubeUrl(),
+          position{0.0f, 1.0f, 0.0f},
+          rotation{0.0f, 0.0f, 0.0f, 1.0f},
+          scale{1.0f, 1.0f, 1.0f},
+          interactionRadius(2.0f),
+          audibleRadius(18.0f),
+          autoplay(false) {}
+};
+
 struct LevelRuntimeConfig {
     std::string skyboxPath;
     FogConfig fog;
     LightingConfig lighting;
     std::vector<CharacterSpawnConfig> characters;
     std::vector<LevelPropConfig> props;
+    std::vector<LevelRadioConfig> radios;
 };
 
 LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath);

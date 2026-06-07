@@ -72,7 +72,7 @@ void DrawMovementTab(GameWorld& gw, float x, float contentY, float h) {
     changed |= FieldRow(x + 10.0f, y, w, "Mouse sens",    cfg.cameraMouseSensitivity, 0.0f,   0.01f, id++, ui);
     changed |= FieldRow(x + 10.0f, y, w, "Camera smooth", cfg.cameraSmooth,           0.0f,  30.0f, id++, ui);
     changed |= FieldRow(x + 10.0f, y, w, "Eye height",    cfg.eyeHeight,              0.0f,   3.0f, id++, ui);
-    changed |= FieldRow(x + 10.0f, y, w, "Interact dist", cfg.interactionDistance,    0.0f,  10.0f, id++, ui);
+    changed |= FieldRow(x + 10.0f, y, w, "Interact ray",  cfg.interactionRayLength,   0.0f,  10.0f, id++, ui);
     if (changed) gw.debugUi.configDirty = true;
 }
 

@@ -5,6 +5,18 @@
 
 #include "debug/ui/debugWidgets.hpp"
 
+namespace DebugMenu {
+    enum {
+        Game,
+        Level,
+        Inspector,
+        Debug,
+        Person,
+        Physics,
+        Count
+    };
+}
+
 namespace debug_ui {
 namespace {
 
@@ -43,10 +55,11 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         if (actions.saveLevelRuntimeConfig) actions.saveLevelRuntimeConfig(gameWorld);
     }
 
-    const char* items[] = {"Game", "Level", "Inspector", "Debug", "Person", "Physics"};
-    int menuX[6] = {};
+    const char* items[DebugMenu::Count] = {"Game", "Level", "Inspector", "Debug", "Person", "Physics"};
+
+    int menuX[DebugMenu::Count] = {};
     int x = saveWidth + 18;
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < DebugMenu::Count; ++i) {
         int width = MeasureUiText(items[i], 20) + 28;
         menuX[i] = x;
         Rectangle rect = Rectangle{static_cast<float>(x), 5.0f, static_cast<float>(width), 24.0f};
@@ -59,8 +72,8 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
         x += width + 6;
     }
 
-    if (gameWorld.debugUi.activeMenu == 0) {
-        float dx = static_cast<float>(menuX[0]);
+    if (gameWorld.debugUi.activeMenu == DebugMenu::Game) {
+        float dx = static_cast<float>(menuX[DebugMenu::Game]);
         if (DebugMenuItem(Rectangle{dx, 38, 190, 30}, "Restart Level")) {
             if (actions.restartLevel) actions.restartLevel(gameWorld);
             gameWorld.debugUi.activeMenu = -1;
@@ -74,20 +87,20 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
             SetVectorInput(gameWorld.debugUi.gameTeleportInput, gameWorld.player.state.position);
             gameWorld.debugUi.activeMenu = -1;
         }
-    } else if (gameWorld.debugUi.activeMenu == 1) {
+    } else if (gameWorld.debugUi.activeMenu == DebugMenu::Level) {
         gameWorld.debugUi.levelConfigOpen  = true;
         gameWorld.debugUi.levelSidebarOpen = false;
         gameWorld.debugUi.levelLoadOpen    = false;
         gameWorld.debugUi.personPanelOpen  = false;
         gameWorld.debugUi.activeMenu       = -1;
-    } else if (gameWorld.debugUi.activeMenu == 2) {
+    } else if (gameWorld.debugUi.activeMenu == DebugMenu::Inspector) {
         gameWorld.debugUi.levelSidebarOpen = true;
         gameWorld.debugUi.levelConfigOpen  = false;
         gameWorld.debugUi.levelLoadOpen    = false;
         gameWorld.debugUi.personPanelOpen  = false;
         gameWorld.debugUi.activeMenu       = -1;
-    } else if (gameWorld.debugUi.activeMenu == 3) {
-        float dx = static_cast<float>(menuX[3]);
+    } else if (gameWorld.debugUi.activeMenu == DebugMenu::Debug) {
+        float dx = static_cast<float>(menuX[DebugMenu::Debug]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Show Forces", true, gameWorld.debugUi.showForces)) {
             gameWorld.debugUi.showForces = !gameWorld.debugUi.showForces;
         }
@@ -99,14 +112,14 @@ void DrawTopBar(GameWorld& gameWorld, const TopBarActions& actions) {
             SetVectorInput(gameWorld.debugUi.debugTeleportInput, gameWorld.render.camera.position);
             gameWorld.debugUi.activeMenu = -1;
         }
-    } else if (gameWorld.debugUi.activeMenu == 4) {
+    } else if (gameWorld.debugUi.activeMenu == DebugMenu::Person) {
         gameWorld.debugUi.personPanelOpen  = true;
         gameWorld.debugUi.levelConfigOpen  = false;
         gameWorld.debugUi.levelSidebarOpen = false;
         gameWorld.debugUi.levelLoadOpen    = false;
         gameWorld.debugUi.activeMenu       = -1;
-    } else if (gameWorld.debugUi.activeMenu == 5) {
-        float dx = static_cast<float>(menuX[5]);
+    } else if (gameWorld.debugUi.activeMenu == DebugMenu::Physics) {
+        float dx = static_cast<float>(menuX[DebugMenu::Physics]);
         if (DebugMenuItem(Rectangle{dx, 38, 220, 30}, "Physics Panel", true, gameWorld.debugUi.showPhysicsPanel)) {
             gameWorld.debugUi.showPhysicsPanel = !gameWorld.debugUi.showPhysicsPanel;
         }

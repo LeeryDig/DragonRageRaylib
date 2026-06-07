@@ -6,6 +6,7 @@
 #include "smoking/smokingSystem.hpp"
 #include "particles/particleSystem.hpp"
 
+#include "audio/radioSystem.hpp"
 #include "debug/cameraDebug.hpp"
 #include "entity/entityRegistry.hpp"
 #include "game/gameWorld.hpp"
@@ -70,13 +71,20 @@ void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
     UpdateEntityFocus(
         gameWorld.npcs,
         gameWorld.render.camera,
-        gameWorld.player.state.position,
-        gameWorld.player.config.interactionDistance,
         gameWorld.player.config.interactionRayLength);
+    UpdateRuntimeRadios(gameWorld.world.radios, gameWorld.player.state.position);
     if (IsActionPressed(gameWorld.player.input, GameAction::Interact)) {
-        BeginFocusedDialogue(gameWorld.npcs);
-        if (gameWorld.npcs.dialogueOpen) {
-            sysState = SysState::DIALOGUE;
+        RuntimeRadio* radio = FindInteractableRadio(
+            gameWorld.world.radios,
+            gameWorld.render.camera,
+            gameWorld.player.config.interactionRayLength);
+        if (radio != nullptr) {
+            ToggleRuntimeRadio(*radio);
+        } else {
+            BeginFocusedDialogue(gameWorld.npcs);
+            if (gameWorld.npcs.dialogueOpen) {
+                sysState = SysState::DIALOGUE;
+            }
         }
     }
 }

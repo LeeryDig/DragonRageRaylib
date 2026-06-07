@@ -83,4 +83,8 @@ Quase tudo num meet noturno passa por um desses três filtros. Vou usar eles ago
     - tem que ser algo do tamanho que eu determinar no blender
     - Eu vou poder escolher ele dentro da lista de props similar ao que temos para selecionar luzes
 
+## Sistema de radio youtube
+### Eu vou querer um sistema que carrega o link do youtube e toca no jogo
+    - Ele vai pegar qualquer link do youtube que ele quiser copiar e detro do jogo se ele olhar para a radio e tiver um link do youtube copiado ele vai pegar e começar a rodar dentro do jogo, pois a intenção é aquela fonte de som, sendo o carro ou um rádiozinho mesmo vai começar a emitir o som do video que ele colou lá
+
 

@@ -6,6 +6,7 @@
 
 #include <raylib.h>
 
+#include "audio/radioSystem.hpp"
 #include "uiText.hpp"
 #include <raymath.h>
 
@@ -125,6 +126,39 @@ bool DebugTextInput(Rectangle rect, const char* label, std::string& text, int fi
     return changed;
 }
 
+bool DebugStringInput(Rectangle rect, const char* label, std::string& text, int fieldId, DebugUiState& ui, std::size_t maxChars = 512) {
+    Vector2 mouse = GetMousePosition();
+    bool hovered = CheckCollisionPointRec(mouse, rect);
+    if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) ui.activeTextField = fieldId;
+    bool active = ui.activeTextField == fieldId;
+    bool changed = false;
+    DrawUiText(label, static_cast<int>(rect.x), static_cast<int>(rect.y + 5), 16, RAYWHITE);
+    Rectangle inputRect = Rectangle{rect.x + 92.0f, rect.y, rect.width - 92.0f, rect.height};
+    DrawRectangleRec(inputRect, active ? Color{46, 56, 72, 255} : Color{36, 36, 42, 255});
+    DrawRectangleLinesEx(inputRect, 1.0f, active ? Color{120, 150, 220, 255} : Color{85, 85, 95, 255});
+    const char* shown = text.size() > 48 ? text.c_str() + (text.size() - 48) : text.c_str();
+    DrawUiText(shown, static_cast<int>(inputRect.x + 6.0f), static_cast<int>(inputRect.y + 5.0f), 16, RAYWHITE);
+    if (active) {
+        int key = GetCharPressed();
+        while (key > 0) {
+            if (key >= 32 && key <= 126 && text.size() < maxChars) { text.push_back(static_cast<char>(key)); changed = true; }
+            key = GetCharPressed();
+        }
+        if ((IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && IsKeyPressed(KEY_V)) {
+            const char* clip = GetClipboardText();
+            if (clip != nullptr) {
+                while (*clip != '\0' && text.size() < maxChars) {
+                    unsigned char c = static_cast<unsigned char>(*clip++);
+                    if (c >= 32 && c <= 126) { text.push_back(static_cast<char>(c)); changed = true; }
+                }
+            }
+        }
+        if (IsKeyPressed(KEY_BACKSPACE) && !text.empty()) { text.pop_back(); changed = true; }
+        if (IsKeyPressed(KEY_ENTER)) ui.activeTextField = 0;
+    }
+    return changed;
+}
+
 void DrawVector3Value(Vector2 pos, const char* label, const Vector3& value) {
     DrawUiText(TextFormat("%s: %.2f %.2f %.2f", label, value.x, value.y, value.z),
         static_cast<int>(pos.x), static_cast<int>(pos.y), 16, LIGHTGRAY);
@@ -200,6 +234,8 @@ int LightSelectionId(int index) { return -300000 - index; }
 int LightIndexFromSelection(int selection) { return -300000 - selection; }
 int PropSelectionId(int index) { return -400000 - index; }
 int PropIndexFromSelection(int selection) { return -400000 - selection; }
+int RadioSelectionId(int index) { return -500000 - index; }
+int RadioIndexFromSelection(int selection) { return -500000 - selection; }
 
 bool DecodeCharacterPartSelection(int selection, int& characterIndex, int& kind, int& partIndex) {
     if (selection > -200000) return false;
@@ -268,6 +304,22 @@ void AddDebugLight(GameWorld& gameWorld, LightType type) {
     gameWorld.debugUi.configDirty = true;
 }
 
+void AddDebugRadio(GameWorld& gameWorld) {
+    Vector3 forward = CameraForward(gameWorld.render.camera);
+    LevelRadioConfig radio;
+    radio.id = TextFormat("radio_%02d", static_cast<int>(gameWorld.world.runtimeConfig.radios.size()) + 1);
+    radio.position = Vector3Add(gameWorld.render.camera.position, Vector3Scale(forward, 6.0f));
+    gameWorld.world.runtimeConfig.radios.push_back(radio);
+    LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
+    int index = static_cast<int>(gameWorld.world.runtimeConfig.radios.size()) - 1;
+    gameWorld.debugUi.selectedLevelNode = RadioSelectionId(index);
+    SetVectorInput(gameWorld.debugUi.levelPositionInput, radio.position);
+    SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(radio.rotation));
+    SetVectorInput(gameWorld.debugUi.levelScaleInput, radio.scale);
+    gameWorld.debugUi.levelSidebarOpen = true;
+    gameWorld.debugUi.configDirty = true;
+}
+
 void AddDebugProp(GameWorld& gameWorld, const PropLibraryItem& item) {
     Vector3 forward = CameraForward(gameWorld.render.camera);
     LevelPropConfig prop;
@@ -288,6 +340,15 @@ void AddDebugProp(GameWorld& gameWorld, const PropLibraryItem& item) {
 }
 
 void DeleteSelectedDebugRoot(GameWorld& gameWorld) {
+    if (gameWorld.debugUi.selectedLevelNode <= -500000) {
+        int radioIndex = RadioIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (radioIndex < 0 || radioIndex >= static_cast<int>(gameWorld.world.radios.size())) return;
+        gameWorld.world.runtimeConfig.radios.erase(gameWorld.world.runtimeConfig.radios.begin() + radioIndex);
+        LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
+        gameWorld.debugUi.selectedLevelNode = -1;
+        gameWorld.debugUi.configDirty = true;
+        return;
+    }
     if (gameWorld.debugUi.selectedLevelNode <= -400000) {
         int propIndex = PropIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
         if (propIndex < 0 || propIndex >= static_cast<int>(gameWorld.world.props.size())) return;
@@ -359,6 +420,16 @@ bool GetSelectedTransform(GameWorld& gameWorld, Vector3& position, Quaternion& r
         saveToLevelConfig = true;
         return true;
     }
+    if (gameWorld.debugUi.selectedLevelNode <= -500000) {
+        int radioIndex = RadioIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (radioIndex < 0 || radioIndex >= static_cast<int>(gameWorld.world.radios.size())) return false;
+        const RuntimeRadio& radio = gameWorld.world.radios[radioIndex];
+        position = radio.config.position;
+        rotation = radio.config.rotation;
+        scale = radio.config.scale;
+        saveToLevelConfig = true;
+        return true;
+    }
     if (gameWorld.debugUi.selectedLevelNode <= -400000) {
         int propIndex = PropIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
         if (propIndex < 0 || propIndex >= static_cast<int>(gameWorld.world.props.size())) return false;
@@ -401,6 +472,16 @@ void SetSelectedTransform(GameWorld& gameWorld, Vector3 position, Quaternion rot
             gameWorld.npcs.characters.size())) {
             ApplyCharacterRootTransform(
                 gameWorld.npcs.characters[characterIndex], position, rotation);
+            gameWorld.debugUi.configDirty = true;
+        }
+    } else if (gameWorld.debugUi.selectedLevelNode <= -500000) {
+        int radioIndex = RadioIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+        if (radioIndex >= 0 && radioIndex < static_cast<int>(gameWorld.world.radios.size())) {
+            RuntimeRadio& radio = gameWorld.world.radios[radioIndex];
+            radio.config.position = position;
+            radio.config.rotation = rotation;
+            radio.config.scale = scale;
+            gameWorld.world.runtimeConfig.radios[radioIndex] = radio.config;
             gameWorld.debugUi.configDirty = true;
         }
     } else if (gameWorld.debugUi.selectedLevelNode <= -400000) {
@@ -622,6 +703,24 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             }
             rootY += 28.0f;
         }
+        for (std::size_t r = 0; r < gameWorld.world.radios.size(); ++r) {
+            const RuntimeRadio& radio = gameWorld.world.radios[r];
+            Rectangle row = Rectangle{x + 12.0f, rootY, width - 24.0f, 24.0f};
+            int selectionId = RadioSelectionId(static_cast<int>(r));
+            selected = gameWorld.debugUi.selectedLevelNode == selectionId;
+            hovered = CheckCollisionPointRec(GetMousePosition(), row);
+            DrawRectangleRec(row,
+                selected ? Color{80, 90, 120, 255} : hovered ? Color{54, 54, 62, 255} : Color{34, 34, 40, 255});
+            DrawUiText(TextFormat("RADIO %s", radio.config.id.c_str()),
+                static_cast<int>(row.x + 6.0f), static_cast<int>(row.y + 5.0f), 14, RAYWHITE);
+            if (hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+                gameWorld.debugUi.selectedLevelNode = selectionId;
+                SetVectorInput(gameWorld.debugUi.levelPositionInput, radio.config.position);
+                SetVectorInput(gameWorld.debugUi.levelRotationInput, EulerDegreesFromQuaternion(radio.config.rotation));
+                SetVectorInput(gameWorld.debugUi.levelScaleInput, radio.config.scale);
+            }
+            rootY += 28.0f;
+        }
         for (std::size_t l = 0; l < gameWorld.world.runtimeConfig.lighting.lights.size(); ++l) {
             const LevelLightConfig& light = gameWorld.world.runtimeConfig.lighting.lights[l];
             Rectangle row = Rectangle{x + 12.0f, rootY, width - 24.0f, 24.0f};
@@ -758,8 +857,9 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
         || gameWorld.debugUi.selectedLevelNode <= -400000) {
         bool editingCharacter = gameWorld.debugUi.selectedLevelNode <= -1000
             && gameWorld.debugUi.selectedLevelNode > -200000;
-        bool editingProp = gameWorld.debugUi.selectedLevelNode <= -400000;
-        DrawUiText(editingProp ? "PROP ROOT" : editingCharacter ? "CHARACTER ROOT" : "LEVEL ROOT",
+        bool editingRadio = gameWorld.debugUi.selectedLevelNode <= -500000;
+        bool editingProp = !editingRadio && gameWorld.debugUi.selectedLevelNode <= -400000;
+        DrawUiText(editingRadio ? "RADIO ROOT" : editingProp ? "PROP ROOT" : editingCharacter ? "CHARACTER ROOT" : "LEVEL ROOT",
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 16, YELLOW); editY += 24.0f;
         DrawUiText("Move/rotate/scale root inteiro.",
             static_cast<int>(x + 14.0f), static_cast<int>(editY), 14, ORANGE); editY += 26.0f;
@@ -789,7 +889,7 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
             Vector3 rotationDegrees = Vector3Zero();
             if (ParseVectorInput(gameWorld.debugUi.levelPositionInput, position)
                 && ParseVectorInput(gameWorld.debugUi.levelRotationInput, rotationDegrees)) {
-                if (editingProp) {
+                if (editingProp || editingRadio) {
                     Vector3 scale = Vector3{1.0f, 1.0f, 1.0f};
                     ParseVectorInput(gameWorld.debugUi.levelScaleInput, scale);
                     SetSelectedTransform(gameWorld, position, QuaternionFromEulerDegrees(rotationDegrees), scale);
@@ -822,11 +922,48 @@ void DrawLevelSidebar(GameWorld& gameWorld) {
                     SetVectorInput(gameWorld.debugUi.levelPositionInput,
                         gameWorld.npcs.characters[characterIndex].rootPosition);
                 }
+            } else if (editingRadio || editingProp) {
+                Vector3 position = gameWorld.render.camera.position;
+                Quaternion rotation = Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+                Vector3 scale = Vector3{1.0f, 1.0f, 1.0f};
+                bool save = false;
+                GetSelectedTransform(gameWorld, position, rotation, scale, save);
+                SetSelectedTransform(gameWorld, gameWorld.render.camera.position, rotation, scale);
             } else {
                 ApplyLevelRootTransform(
                     gameWorld.world.level, gameWorld.render.camera.position, gameWorld.world.level.rootRotation);
                 SetVectorInput(gameWorld.debugUi.levelPositionInput, gameWorld.world.level.rootPosition);
                 ReloadJoltLevelPhysics(gameWorld);
+            }
+        }
+        if (editingRadio) {
+            int radioIndex = RadioIndexFromSelection(gameWorld.debugUi.selectedLevelNode);
+            if (radioIndex >= 0 && radioIndex < static_cast<int>(gameWorld.world.radios.size())) {
+                RuntimeRadio& radio = gameWorld.world.radios[radioIndex];
+                editY += 34.0f;
+                if (DebugStringInput(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "YouTube", radio.config.youtubeUrl, 610, gameWorld.debugUi)) {
+                    gameWorld.world.runtimeConfig.radios[radioIndex] = radio.config;
+                    gameWorld.debugUi.configDirty = true;
+                }
+                editY += 32.0f;
+                DrawUiText(TextFormat("Interaction Ray: %.2f", gameWorld.player.config.interactionRayLength),
+                    static_cast<int>(x + 14.0f), static_cast<int>(editY), 13, LIGHTGRAY); editY += 22.0f;
+                if (DebugFloatSlider(Rectangle{x + 14.0f, editY, 320.0f, 24.0f}, "Audible", radio.config.audibleRadius, 1.0f, 80.0f)) {
+                    gameWorld.world.runtimeConfig.radios[radioIndex] = radio.config;
+                    gameWorld.debugUi.configDirty = true;
+                }
+                editY += 34.0f;
+                if (DebugButton(Rectangle{x + 14.0f, editY, 130.0f, 24.0f}, radio.playing ? "Radio ON" : "Radio OFF")) ToggleRuntimeRadio(radio);
+                if (DebugButton(Rectangle{x + 154.0f, editY, 130.0f, 24.0f}, radio.config.autoplay ? "Autoplay ON" : "Autoplay OFF")) {
+                    radio.config.autoplay = !radio.config.autoplay;
+                    gameWorld.world.runtimeConfig.radios[radioIndex] = radio.config;
+                    gameWorld.debugUi.configDirty = true;
+                }
+                editY += 34.0f;
+                Rectangle deleteRect = Rectangle{x + 214.0f, editY, 92.0f, 26.0f};
+                DrawRectangleRec(deleteRect, CheckCollisionPointRec(GetMousePosition(), deleteRect) ? Color{150, 55, 45, 255} : Color{115, 42, 36, 255});
+                DrawUiText("Delete", static_cast<int>(deleteRect.x + 34.0f), static_cast<int>(deleteRect.y + 6.0f), 14, RAYWHITE);
+                if (CheckCollisionPointRec(GetMousePosition(), deleteRect) && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) { DeleteSelectedDebugRoot(gameWorld); return; }
             }
         }
         if (editingCharacter) {
@@ -1182,16 +1319,18 @@ void DrawDebugAddLightContextMenu(GameWorld& gameWorld) {
     }
     if (!open) return;
 
-    Rectangle menu = Rectangle{pos.x, pos.y, 160.0f, 88.0f};
+    Rectangle menu = Rectangle{pos.x, pos.y, 160.0f, 114.0f};
     DrawRectangleRec(menu, Color{32, 32, 38, 245});
     DrawRectangleLinesEx(menu, 1.0f, Color{95, 95, 105, 255});
     DrawUiText("Add", static_cast<int>(menu.x + 10.0f), static_cast<int>(menu.y + 8.0f), 16, YELLOW);
     Rectangle lights = Rectangle{menu.x + 8.0f, menu.y + 32.0f, menu.width - 16.0f, 24.0f};
     Rectangle props = Rectangle{menu.x + 8.0f, menu.y + 58.0f, menu.width - 16.0f, 24.0f};
+    Rectangle radios = Rectangle{menu.x + 8.0f, menu.y + 84.0f, menu.width - 16.0f, 24.0f};
     if (CheckCollisionPointRec(mouse, lights)) side = 1;
     if (CheckCollisionPointRec(mouse, props)) side = 2;
     DebugMenuItem(lights, "Lights >");
     DebugMenuItem(props, "Props >");
+    if (DebugMenuItem(radios, "Radio")) { AddDebugRadio(gameWorld); open = false; }
 
     Rectangle sideRect = Rectangle{menu.x + menu.width + 4.0f, menu.y + 32.0f, 230.0f, side == 2 ? 220.0f : 88.0f};
     bool overSide = false;

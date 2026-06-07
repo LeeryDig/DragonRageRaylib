@@ -16,6 +16,7 @@ int main() {
         Utils::ResolveProjectPath(WORLD_CONFIG_PATH), DefaultWorldConfig());
 
     InitWindow(wc.windowWidth, wc.windowHeight, wc.windowTitle.c_str());
+    InitAudioDevice();
     SetExitKey(KEY_NULL);
     int monitor = GetCurrentMonitor();
     int monitorWidth = GetMonitorWidth(monitor);
@@ -57,6 +58,7 @@ int main() {
 
     UnloadGameWorld(gameWorld);
     UnloadUiFont();
+    CloseAudioDevice();
     CloseWindow();
 
     return 0;

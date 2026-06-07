@@ -14,7 +14,7 @@ include(GNUInstallDirs)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-set(SUPPORT_MODULE_RAUDIO OFF CACHE BOOL "" FORCE)
+set(SUPPORT_MODULE_RAUDIO ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     raylib
@@ -44,6 +44,10 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(JoltPhysics)
 
+if(MSVC)
+    target_compile_options(Jolt PRIVATE /wd4865)
+endif()
+
 file(
     GLOB_RECURSE DRAGONRAGE_SOURCES
     CONFIGURE_DEPENDS
@@ -59,6 +63,9 @@ target_include_directories(
 )
 
 target_link_libraries(DragonRage PRIVATE raylib Jolt)
+if(WIN32)
+    target_link_libraries(DragonRage PRIVATE ws2_32)
+endif()
 
 set_target_properties(
     DragonRage

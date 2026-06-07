@@ -7,6 +7,7 @@
 #include <raylib.h>
 #include <raymath.h>
 
+#include "audio/radioSystem.hpp"
 #include "debug/cameraDebug.hpp"
 #include "debug/debugIcons.hpp"
 #include "entity/entityRegistry.hpp"
@@ -78,6 +79,7 @@ void ResetGameWorld(GameWorld& gameWorld) {
 void RestartLevel(GameWorld& gameWorld) {
     gameWorld.particles.Unload();
     gameWorld.player.smoking.emitterHandle = -1;
+    UnloadRuntimeRadios(gameWorld.world.radios);
     UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.runtimeConfig = LoadLevelRuntimeConfig(gameWorld.world.currentLevelConfigPath);
@@ -85,6 +87,7 @@ void RestartLevel(GameWorld& gameWorld) {
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+    LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -101,6 +104,7 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
 
     gameWorld.particles.Unload();
     gameWorld.player.smoking.emitterHandle = -1;
+    UnloadRuntimeRadios(gameWorld.world.radios);
     UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     gameWorld.world.currentLevelConfigIndex = levelIndex;
@@ -111,6 +115,7 @@ void LoadConfiguredLevel(GameWorld& gameWorld, int levelIndex) {
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+    LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -159,6 +164,11 @@ void SaveCurrentLevelRuntimeConfig(GameWorld& gameWorld) {
         gameWorld.world.runtimeConfig.characters[i].rotationDegrees =
             EulerDegreesFromQuaternion(CharacterAt(gameWorld.npcs, i).rootRotation);
     }
+    for (std::size_t i = 0;
+         i < gameWorld.world.runtimeConfig.radios.size() && i < gameWorld.world.radios.size();
+         ++i) {
+        gameWorld.world.runtimeConfig.radios[i] = gameWorld.world.radios[i].config;
+    }
     if (SaveLevelRuntimeConfig(
             gameWorld.world.currentLevelConfigPath, gameWorld.world.runtimeConfig)) {
         gameWorld.debugUi.configDirty = false;
@@ -172,6 +182,7 @@ void ReloadCurrentLevelForConfig(GameWorld& gameWorld) {
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+    LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
     ApplyRuntimeRenderConfig(gameWorld);
     ResetGameWorld(gameWorld);
 }
@@ -201,6 +212,7 @@ GameWorld LoadGameWorld() {
     gameWorld.world.level = LoadLevel(
         gameWorld.world.currentLevelPath, gameWorld.world.runtimeConfig.skyboxPath);
     LoadRuntimeProps(gameWorld.world.props, gameWorld.world.runtimeConfig.props, gameWorld.render.fogShader);
+    LoadRuntimeRadios(gameWorld.world.radios, gameWorld.world.runtimeConfig.radios);
     ApplyRuntimeRenderConfig(gameWorld);
     gameWorld.player.config = LoadPersonConfig(
         Utils::ResolveProjectPath(PERSON_CONFIG_PATH), DefaultPersonConfig());
@@ -242,6 +254,7 @@ void UnloadGameWorld(GameWorld& gameWorld) {
     gameWorld.particles.Unload();
     gameWorld.player.physics->Shutdown();
     DestroyEntityRegistry(gameWorld.npcs);
+    UnloadRuntimeRadios(gameWorld.world.radios);
     UnloadRuntimeProps(gameWorld.world.props);
     UnloadLevel(gameWorld.world.level);
     UnloadFogShader(gameWorld.render.fogShader);

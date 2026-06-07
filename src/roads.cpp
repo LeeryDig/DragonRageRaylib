@@ -16,7 +16,7 @@ std::vector<Roads> GenerateRoads(int total) {
     for (std::size_t i = 0; i < total; i++) {
         Roads road;
         road.model = model;
-        road.position = (Vector3){0.0, 0.001, zPos};
+        road.position = Vector3{0.0f, 0.001f, zPos};
         road.length = length;
         zPos += road.length;
         roads.push_back(road);
