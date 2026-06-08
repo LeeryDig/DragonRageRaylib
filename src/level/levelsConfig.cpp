@@ -8,125 +8,14 @@
 
 #include "raylib.h"
 
+#include "assets/json.hpp"
+
 namespace {
 
-std::string ExtractArrayBlock(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-
-    std::size_t blockStart = json.find('[', keyPos);
-    if (blockStart == std::string::npos) return "";
-
-    int depth = 0;
-    bool inString = false;
-    bool escaped = false;
-    for (std::size_t i = blockStart; i < json.size(); ++i) {
-        char c = json[i];
-        if (inString) {
-            if (escaped) {
-                escaped = false;
-            } else if (c == '\\') {
-                escaped = true;
-            } else if (c == '"') {
-                inString = false;
-            }
-            continue;
-        }
-        if (c == '"') inString = true;
-        else if (c == '[') ++depth;
-        else if (c == ']') {
-            --depth;
-            if (depth == 0) return json.substr(blockStart, i - blockStart + 1);
-        }
-    }
-    return "";
-}
-
-std::vector<std::string> ExtractObjectBlocks(const std::string& arrayBlock) {
-    std::vector<std::string> blocks;
-    int depth = 0;
-    bool inString = false;
-    bool escaped = false;
-    std::size_t objectStart = std::string::npos;
-
-    for (std::size_t i = 0; i < arrayBlock.size(); ++i) {
-        char c = arrayBlock[i];
-        if (inString) {
-            if (escaped) escaped = false;
-            else if (c == '\\') escaped = true;
-            else if (c == '"') inString = false;
-            continue;
-        }
-        if (c == '"') {
-            inString = true;
-        } else if (c == '{') {
-            if (depth == 0) objectStart = i;
-            ++depth;
-        } else if (c == '}') {
-            --depth;
-            if (depth == 0 && objectStart != std::string::npos) {
-                blocks.push_back(arrayBlock.substr(objectStart, i - objectStart + 1));
-                objectStart = std::string::npos;
-            }
-        }
-    }
-    return blocks;
-}
-
-std::string UnescapeJsonString(const std::string& value) {
-    std::string out;
-    out.reserve(value.size());
-    for (std::size_t i = 0; i < value.size(); ++i) {
-        char c = value[i];
-        if (c == '\\' && i + 1 < value.size()) {
-            char escaped = value[++i];
-            switch (escaped) {
-                case 'n': out.push_back('\n'); break;
-                case 'r': out.push_back('\r'); break;
-                case 't': out.push_back('\t'); break;
-                case 'b': out.push_back('\b'); break;
-                case 'f': out.push_back('\f'); break;
-                default: out.push_back(escaped); break;
-            }
-        } else {
-            out.push_back(c);
-        }
-    }
-    return out;
-}
-
-std::string ExtractString(const std::string& json, const std::string& key, const std::string& fallbackValue) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return fallbackValue;
-
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return fallbackValue;
-
-    std::size_t valueStart = json.find('"', colon + 1);
-    if (valueStart == std::string::npos) return fallbackValue;
-    ++valueStart;
-
-    std::string value;
-    bool escaped = false;
-    for (std::size_t i = valueStart; i < json.size(); ++i) {
-        char c = json[i];
-        if (escaped) {
-            value.push_back('\\');
-            value.push_back(c);
-            escaped = false;
-            continue;
-        }
-        if (c == '\\') {
-            escaped = true;
-            continue;
-        }
-        if (c == '"') return UnescapeJsonString(value);
-        value.push_back(c);
-    }
-    return fallbackValue;
-}
+using assets::GetMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::StringMember;
 
 std::string EscapeJsonString(const std::string& value) {
     std::string out;
@@ -166,15 +55,27 @@ LevelsConfig LoadLevelsConfig(const std::string& filePath, const LevelsConfig& f
     std::string json = rawFileContents;
     UnloadFileText(rawFileContents);
 
-    std::vector<std::string> blocks = ExtractObjectBlocks(ExtractArrayBlock(json, "levels"));
-    if (blocks.empty()) return config;
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "LevelsConfig: JSON parse warning in %s: %s", filePath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) {
+        TraceLog(LOG_WARNING, "LevelsConfig: root is not object in %s", filePath.c_str());
+        return config;
+    }
+
+    const JsonValue* levels = GetMember(root, "levels");
+    if (!levels || levels->type != JsonValue::Array || levels->arrayValue.empty()) return config;
 
     config.levels.clear();
-    for (std::size_t i = 0; i < blocks.size(); ++i) {
+    for (std::size_t i = 0; i < levels->arrayValue.size(); ++i) {
+        const JsonValue& item = levels->arrayValue[i];
+        if (item.type != JsonValue::Object) continue;
         LevelConfigEntry entry;
-        entry.name = ExtractString(blocks[i], "name", "");
-        entry.path = ExtractString(blocks[i], "path", "");
-        entry.configPath = ExtractString(blocks[i], "config", "");
+        entry.name = StringMember(item, "name", "");
+        entry.path = StringMember(item, "path", "");
+        entry.configPath = StringMember(item, "config", "");
         if (!entry.path.empty()) {
             if (entry.name.empty()) entry.name = entry.path;
             config.levels.push_back(entry);

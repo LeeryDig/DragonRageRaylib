@@ -6,50 +6,17 @@
 
 #include <raylib.h>
 
+#include "assets/json.hpp"
 #include "utils.hpp"
 
 namespace {
 
-float ExtractFloat(const std::string& json, const std::string& key, float fallback) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return fallback;
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return fallback;
-    char* end = nullptr;
-    float val = strtof(json.c_str() + colon + 1, &end);
-    return (end == json.c_str() + colon + 1) ? fallback : val;
-}
-
-bool ExtractBool(const std::string& json, const std::string& key, bool fallback) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return fallback;
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return fallback;
-    std::size_t val = json.find_first_not_of(" \t\n\r", colon + 1);
-    if (val == std::string::npos) return fallback;
-    if (json[val] == 't') return true;
-    if (json[val] == 'f') return false;
-    return fallback;
-}
-
-std::string ExtractObjectBlock(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-    std::size_t blockStart = json.find('{', keyPos);
-    if (blockStart == std::string::npos) return "";
-    int depth = 0;
-    for (std::size_t i = blockStart; i < json.size(); ++i) {
-        if (json[i] == '{') depth++;
-        else if (json[i] == '}') {
-            depth--;
-            if (depth == 0) return json.substr(blockStart, i - blockStart + 1);
-        }
-    }
-    return "";
-}
+using assets::BoolMember;
+using assets::FloatMember;
+using assets::GetMember;
+using assets::IntMember;
+using assets::JsonParser;
+using assets::JsonValue;
 
 }  // namespace
 
@@ -65,34 +32,44 @@ SmokingConfig LoadSmokingConfig(const std::string& filePath, const SmokingConfig
     std::string json = raw;
     UnloadFileText(raw);
 
-    cfg.defaultPackSize      = static_cast<int>(ExtractFloat(json, "default_pack_size", static_cast<float>(fallback.defaultPackSize)));
-    cfg.drainIdle            = ExtractFloat(json, "drain_idle",            fallback.drainIdle);
-    cfg.drainPuff            = ExtractFloat(json, "drain_puff",            fallback.drainPuff);
-    cfg.puffDurationBase     = ExtractFloat(json, "puff_duration_base",    fallback.puffDurationBase);
-    cfg.puffDurationVariance = ExtractFloat(json, "puff_duration_variance",fallback.puffDurationVariance);
-    cfg.emitParticles        = ExtractBool(json,  "emit_particles",        fallback.emitParticles);
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "SmokingConfig: JSON parse warning in %s: %s", filePath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) {
+        TraceLog(LOG_WARNING, "SmokingConfig: root is not object in %s", filePath.c_str());
+        return cfg;
+    }
 
-    std::string pBlock = ExtractObjectBlock(json, "particles");
-    if (!pBlock.empty()) {
+    cfg.defaultPackSize      = IntMember(root,   "default_pack_size", fallback.defaultPackSize);
+    cfg.drainIdle            = FloatMember(root, "drain_idle",            fallback.drainIdle);
+    cfg.drainPuff            = FloatMember(root, "drain_puff",            fallback.drainPuff);
+    cfg.puffDurationBase     = FloatMember(root, "puff_duration_base",    fallback.puffDurationBase);
+    cfg.puffDurationVariance = FloatMember(root, "puff_duration_variance",fallback.puffDurationVariance);
+    cfg.emitParticles        = BoolMember(root,  "emit_particles",        fallback.emitParticles);
+
+    const JsonValue* particles = GetMember(root, "particles");
+    if (particles && particles->type == JsonValue::Object) {
         ParticleEmitterConfig& p = cfg.postPuffParticles;
-        p.maxParticles  = static_cast<int>(ExtractFloat(pBlock, "max_particles",  static_cast<float>(fallback.postPuffParticles.maxParticles)));
-        p.spawnRate     = ExtractFloat(pBlock, "spawn_rate",     fallback.postPuffParticles.spawnRate);
-        p.emitDuration  = ExtractFloat(pBlock, "emit_duration",  fallback.postPuffParticles.emitDuration);
-        p.lifetime      = ExtractFloat(pBlock, "lifetime",       fallback.postPuffParticles.lifetime);
-        p.startSize     = ExtractFloat(pBlock, "start_size",     fallback.postPuffParticles.startSize);
-        p.endSize       = ExtractFloat(pBlock, "end_size",       fallback.postPuffParticles.endSize);
-        p.startAlpha    = ExtractFloat(pBlock, "start_alpha",    fallback.postPuffParticles.startAlpha);
-        p.endAlpha      = ExtractFloat(pBlock, "end_alpha",      fallback.postPuffParticles.endAlpha);
-        p.velMinX       = ExtractFloat(pBlock, "vel_min_x",      fallback.postPuffParticles.velMinX);
-        p.velMinY       = ExtractFloat(pBlock, "vel_min_y",      fallback.postPuffParticles.velMinY);
-        p.velMinZ       = ExtractFloat(pBlock, "vel_min_z",      fallback.postPuffParticles.velMinZ);
-        p.velMaxX       = ExtractFloat(pBlock, "vel_max_x",      fallback.postPuffParticles.velMaxX);
-        p.velMaxY       = ExtractFloat(pBlock, "vel_max_y",      fallback.postPuffParticles.velMaxY);
-        p.velMaxZ       = ExtractFloat(pBlock, "vel_max_z",      fallback.postPuffParticles.velMaxZ);
-        p.drag          = ExtractFloat(pBlock, "drag",           fallback.postPuffParticles.drag);
-        p.emitOffsetX   = ExtractFloat(pBlock, "emit_offset_x",  fallback.postPuffParticles.emitOffsetX);
-        p.emitOffsetY   = ExtractFloat(pBlock, "emit_offset_y",  fallback.postPuffParticles.emitOffsetY);
-        p.emitOffsetZ   = ExtractFloat(pBlock, "emit_offset_z",  fallback.postPuffParticles.emitOffsetZ);
+        p.maxParticles  = IntMember(*particles,   "max_particles", fallback.postPuffParticles.maxParticles);
+        p.spawnRate     = FloatMember(*particles, "spawn_rate",     fallback.postPuffParticles.spawnRate);
+        p.emitDuration  = FloatMember(*particles, "emit_duration",  fallback.postPuffParticles.emitDuration);
+        p.lifetime      = FloatMember(*particles, "lifetime",       fallback.postPuffParticles.lifetime);
+        p.startSize     = FloatMember(*particles, "start_size",     fallback.postPuffParticles.startSize);
+        p.endSize       = FloatMember(*particles, "end_size",       fallback.postPuffParticles.endSize);
+        p.startAlpha    = FloatMember(*particles, "start_alpha",    fallback.postPuffParticles.startAlpha);
+        p.endAlpha      = FloatMember(*particles, "end_alpha",      fallback.postPuffParticles.endAlpha);
+        p.velMinX       = FloatMember(*particles, "vel_min_x",      fallback.postPuffParticles.velMinX);
+        p.velMinY       = FloatMember(*particles, "vel_min_y",      fallback.postPuffParticles.velMinY);
+        p.velMinZ       = FloatMember(*particles, "vel_min_z",      fallback.postPuffParticles.velMinZ);
+        p.velMaxX       = FloatMember(*particles, "vel_max_x",      fallback.postPuffParticles.velMaxX);
+        p.velMaxY       = FloatMember(*particles, "vel_max_y",      fallback.postPuffParticles.velMaxY);
+        p.velMaxZ       = FloatMember(*particles, "vel_max_z",      fallback.postPuffParticles.velMaxZ);
+        p.drag          = FloatMember(*particles, "drag",           fallback.postPuffParticles.drag);
+        p.emitOffsetX   = FloatMember(*particles, "emit_offset_x",  fallback.postPuffParticles.emitOffsetX);
+        p.emitOffsetY   = FloatMember(*particles, "emit_offset_y",  fallback.postPuffParticles.emitOffsetY);
+        p.emitOffsetZ   = FloatMember(*particles, "emit_offset_z",  fallback.postPuffParticles.emitOffsetZ);
     }
 
     return cfg;

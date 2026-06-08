@@ -8,6 +8,7 @@ struct WorldConfig {
     int windowHeight;
     std::string windowTitle;
     int targetFps;
+    bool fullscreen;
 };
 
 WorldConfig DefaultWorldConfig();

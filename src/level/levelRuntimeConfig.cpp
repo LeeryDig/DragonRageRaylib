@@ -11,136 +11,21 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "assets/json.hpp"
 #include "utils.hpp"
 
 namespace {
 
-struct JsonValue {
-    enum Type { Null, Bool, Number, String, Array, Object } type;
-    bool boolValue;
-    double numberValue;
-    std::string stringValue;
-    std::vector<JsonValue> arrayValue;
-    std::map<std::string, JsonValue> objectValue;
-
-    JsonValue() : type(Null), boolValue(false), numberValue(0.0) {}
-};
-
-class JsonParser {
-  public:
-    explicit JsonParser(const std::string& textIn) : text(textIn), pos(0) {}
-    JsonValue Parse() { SkipWhitespace(); return ParseValue(); }
-
-  private:
-    const std::string& text;
-    std::size_t pos;
-
-    void SkipWhitespace() {
-        while (pos < text.size() && (text[pos] == ' ' || text[pos] == '\n' || text[pos] == '\r' || text[pos] == '\t')) ++pos;
-    }
-
-    bool Match(const char* token) {
-        std::size_t len = std::char_traits<char>::length(token);
-        if (text.compare(pos, len, token) == 0) { pos += len; return true; }
-        return false;
-    }
-
-    JsonValue ParseValue() {
-        SkipWhitespace();
-        if (pos >= text.size()) return JsonValue();
-        char c = text[pos];
-        if (c == '{') return ParseObject();
-        if (c == '[') return ParseArray();
-        if (c == '"') return ParseString();
-        if (c == '-' || (c >= '0' && c <= '9')) return ParseNumber();
-        JsonValue value;
-        if (Match("true")) { value.type = JsonValue::Bool; value.boolValue = true; return value; }
-        if (Match("false")) { value.type = JsonValue::Bool; value.boolValue = false; return value; }
-        Match("null");
-        return value;
-    }
-
-    JsonValue ParseObject() {
-        JsonValue value; value.type = JsonValue::Object; ++pos; SkipWhitespace();
-        if (pos < text.size() && text[pos] == '}') { ++pos; return value; }
-        while (pos < text.size()) {
-            SkipWhitespace();
-            JsonValue key = ParseString(); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ':') ++pos;
-            value.objectValue[key.stringValue] = ParseValue(); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == '}') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseArray() {
-        JsonValue value; value.type = JsonValue::Array; ++pos; SkipWhitespace();
-        if (pos < text.size() && text[pos] == ']') { ++pos; return value; }
-        while (pos < text.size()) {
-            value.arrayValue.push_back(ParseValue()); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == ']') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseString() {
-        JsonValue value; value.type = JsonValue::String;
-        if (pos >= text.size() || text[pos] != '"') return value;
-        ++pos;
-        while (pos < text.size()) {
-            char c = text[pos++];
-            if (c == '"') break;
-            if (c == '\\' && pos < text.size()) {
-                char escaped = text[pos++];
-                switch (escaped) {
-                    case '"': value.stringValue.push_back('"'); break;
-                    case '\\': value.stringValue.push_back('\\'); break;
-                    case '/': value.stringValue.push_back('/'); break;
-                    case 'b': value.stringValue.push_back('\b'); break;
-                    case 'f': value.stringValue.push_back('\f'); break;
-                    case 'n': value.stringValue.push_back('\n'); break;
-                    case 'r': value.stringValue.push_back('\r'); break;
-                    case 't': value.stringValue.push_back('\t'); break;
-                    default: value.stringValue.push_back(escaped); break;
-                }
-            } else {
-                value.stringValue.push_back(c);
-            }
-        }
-        return value;
-    }
-
-    JsonValue ParseNumber() {
-        JsonValue value; value.type = JsonValue::Number;
-        const char* start = text.c_str() + pos;
-        char* end = nullptr;
-        value.numberValue = std::strtod(start, &end);
-        pos += static_cast<std::size_t>(end - start);
-        return value;
-    }
-};
-
-const JsonValue* GetMember(const JsonValue& value, const char* name) {
-    if (value.type != JsonValue::Object) return nullptr;
-    std::map<std::string, JsonValue>::const_iterator it = value.objectValue.find(name);
-    return it == value.objectValue.end() ? nullptr : &it->second;
-}
-
-std::string StringMember(const JsonValue& value, const char* name, const std::string& fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::String ? member->stringValue : fallback;
-}
-
-bool BoolMember(const JsonValue& value, const char* name, bool fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::Bool ? member->boolValue : fallback;
-}
+using assets::BoolMember;
+using assets::FloatMember;
+using assets::GetMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::NumberAt;
+using assets::StringMember;
 
 float NumberMember(const JsonValue& value, const char* name, float fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::Number ? static_cast<float>(member->numberValue) : fallback;
+    return FloatMember(value, name, fallback);
 }
 
 int ColorChannelAt(const JsonValue* arrayValue, std::size_t index, unsigned char fallback) {
@@ -190,12 +75,6 @@ const char* LightTypeToString(LightType type) {
     return "directional";
 }
 
-float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
-    if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
-    const JsonValue& value = arrayValue->arrayValue[index];
-    return value.type == JsonValue::Number ? static_cast<float>(value.numberValue) : fallback;
-}
-
 Vector3 Vector3Member(const JsonValue& value, const char* name, Vector3 fallback) {
     const JsonValue* member = GetMember(value, name);
     return Vector3{NumberAt(member, 0, fallback.x), NumberAt(member, 1, fallback.y), NumberAt(member, 2, fallback.z)};
@@ -240,7 +119,11 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
 
     std::string json = raw;
     UnloadFileText(raw);
-    JsonValue root = JsonParser(json).Parse();
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "Level config: JSON parse warning in %s: %s", configPath.c_str(), parser.Error().c_str());
+    }
     if (root.type != JsonValue::Object) return config;
 
     config.skyboxPath = StringMember(root, "skybox", "");

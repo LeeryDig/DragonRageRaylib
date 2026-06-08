@@ -36,7 +36,7 @@ int IndexOfCharacter(const EntityRegistry& registry, EntityId id);
 void UpdateEntityFocus(EntityRegistry& registry, const Camera& camera, Vector3 playerPosition, float interactionDistance, float rayLength);
 void BeginFocusedDialogue(EntityRegistry& registry);
 void UpdateDialogueInput(EntityRegistry& registry, const InputMap& inputMap);
-void ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPosition, float playerRadius);
+bool ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPosition, float playerRadius);
 void DrawEntityCharacters(const EntityRegistry& registry);
 void DrawInteractionUi(const EntityRegistry& registry);
 

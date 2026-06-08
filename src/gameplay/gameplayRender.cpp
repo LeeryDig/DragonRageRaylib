@@ -15,27 +15,52 @@
 #include "personController.hpp"
 #include "render/fogRenderer.hpp"
 
-void DrawGameplay(GameWorld& gameWorld) {
-    BeginMode3D(gameWorld.render.camera);
-    DrawLevelSkybox(gameWorld.world.level, gameWorld.render.camera);
-    UpdateFogShader(gameWorld.render.fogShader, gameWorld.world.runtimeConfig.fog, gameWorld.render.camera);
-    UpdateLightingShader(gameWorld.render.fogShader, gameWorld.world.runtimeConfig.lighting);
-    DrawLevel(gameWorld.world.level);
-    DrawRuntimeProps(gameWorld.world.props);
-    DrawEntityCharacters(gameWorld.npcs);
-    if (gameWorld.debugUi.showForces) {
-        DrawLevelCollidersDebug(gameWorld.world.level);
-        DrawPersonDebugCapsule(gameWorld.player.state, gameWorld.player.config);
-        DrawSphere(gameWorld.player.state.position, 0.05f, gameWorld.player.state.grounded ? GREEN : RED);
+void DrawGameplay(GameplayRenderContext context) {
+    WorldContext& world = context.world;
+    PlayerContext& player = context.player;
+    RenderContext& render = context.render;
+    EntityRegistry& npcs = context.npcs;
+    DebugUiState& debugUi = context.debugUi;
+    ParticleSystem& particles = context.particles;
+
+    BeginMode3D(render.camera);
+    DrawLevelSkybox(world.level, render.camera);
+    UpdateFogShader(render.fogShader, world.runtimeConfig.fog, render.camera);
+    UpdateLightingShader(render.fogShader, world.runtimeConfig.lighting);
+    DrawLevel(world.level);
+    DrawRuntimeProps(world.props);
+    DrawEntityCharacters(npcs);
+    if (debugUi.showForces) {
+        DrawLevelCollidersDebug(world.level);
+        DrawPersonDebugCapsule(player.state, player.config);
+        DrawSphere(player.state.position, 0.05f, player.state.grounded ? GREEN : RED);
     }
-    gameWorld.particles.DrawParticles(gameWorld.render.camera);
-    editor::Draw3DOverlays(gameWorld);
+    particles.DrawParticles(render.camera);
+    if (context.editorWorld) {
+        editor::Draw3DOverlays(*context.editorWorld);
+    }
     EndMode3D();
-    editor::Draw2DOverlays(gameWorld);
-    DrawInteractionUi(gameWorld.npcs);
-    DrawSmokingUi(gameWorld.player.smoking, GetScreenWidth(), GetScreenHeight());
-    debug_ui::DrawPersonPanel(gameWorld);
-    if (gameWorld.debugUi.enabled) {
-        DrawDebugAxisGizmo(gameWorld.render.camera);
+    if (context.editorWorld) {
+        editor::Draw2DOverlays(*context.editorWorld);
     }
+    DrawInteractionUi(npcs);
+    DrawSmokingUi(player.smoking, GetScreenWidth(), GetScreenHeight());
+    if (context.editorWorld) {
+        debug_ui::DrawPersonPanel(*context.editorWorld);
+    }
+    if (debugUi.enabled) {
+        DrawDebugAxisGizmo(render.camera);
+    }
+}
+
+void DrawGameplay(GameWorld& gameWorld) {
+    DrawGameplay(
+        GameplayRenderContext{
+            gameWorld.world,
+            gameWorld.player,
+            gameWorld.render,
+            gameWorld.npcs,
+            gameWorld.debugUi,
+            gameWorld.particles,
+            &gameWorld});
 }

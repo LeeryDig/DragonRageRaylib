@@ -15,12 +15,15 @@ int main() {
     WorldConfig wc = LoadWorldConfig(
         Utils::ResolveProjectPath(WORLD_CONFIG_PATH), DefaultWorldConfig());
 
+    if (wc.fullscreen) {
+        SetConfigFlags(FLAG_FULLSCREEN_MODE);
+    }
     InitWindow(wc.windowWidth, wc.windowHeight, wc.windowTitle.c_str());
     SetExitKey(KEY_NULL);
     int monitor = GetCurrentMonitor();
     int monitorWidth = GetMonitorWidth(monitor);
     int monitorHeight = GetMonitorHeight(monitor);
-    if (monitorWidth > 0 && monitorHeight > 0) {
+    if (!wc.fullscreen && monitorWidth > 0 && monitorHeight > 0) {
         SetWindowSize(monitorWidth, monitorHeight);
         SetWindowPosition(0, 0);
     }

@@ -14,161 +14,18 @@
 #include <vector>
 
 #include "raymath.h"
+#include "assets/json.hpp"
 #include "rlgl.h"
 #include "utils.hpp"
 
 namespace {
 
-struct JsonValue {
-    enum Type { Null, Bool, Number, String, Array, Object } type;
-    bool boolValue;
-    double numberValue;
-    std::string stringValue;
-    std::vector<JsonValue> arrayValue;
-    std::map<std::string, JsonValue> objectValue;
-
-    JsonValue() : type(Null), boolValue(false), numberValue(0.0) {}
-};
-
-class JsonParser {
-  public:
-    explicit JsonParser(const std::string& textIn) : text(textIn), pos(0) {}
-
-    JsonValue Parse() {
-        SkipWhitespace();
-        return ParseValue();
-    }
-
-  private:
-    const std::string& text;
-    std::size_t pos;
-
-    void SkipWhitespace() {
-        while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
-            ++pos;
-        }
-    }
-
-    bool Match(const char* token) {
-        std::size_t len = std::char_traits<char>::length(token);
-        if (text.compare(pos, len, token) == 0) {
-            pos += len;
-            return true;
-        }
-        return false;
-    }
-
-    JsonValue ParseValue() {
-        SkipWhitespace();
-        if (pos >= text.size()) {
-            return JsonValue();
-        }
-        char c = text[pos];
-        if (c == '{') return ParseObject();
-        if (c == '[') return ParseArray();
-        if (c == '"') return ParseString();
-        if (c == '-' || (c >= '0' && c <= '9')) return ParseNumber();
-        JsonValue value;
-        if (Match("true")) { value.type = JsonValue::Bool; value.boolValue = true; return value; }
-        if (Match("false")) { value.type = JsonValue::Bool; value.boolValue = false; return value; }
-        Match("null");
-        return value;
-    }
-
-    JsonValue ParseObject() {
-        JsonValue value;
-        value.type = JsonValue::Object;
-        ++pos;
-        SkipWhitespace();
-        if (pos < text.size() && text[pos] == '}') { ++pos; return value; }
-        while (pos < text.size()) {
-            JsonValue key = ParseString();
-            SkipWhitespace();
-            if (pos < text.size() && text[pos] == ':') ++pos;
-            JsonValue child = ParseValue();
-            value.objectValue[key.stringValue] = child;
-            SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == '}') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseArray() {
-        JsonValue value;
-        value.type = JsonValue::Array;
-        ++pos;
-        SkipWhitespace();
-        if (pos < text.size() && text[pos] == ']') { ++pos; return value; }
-        while (pos < text.size()) {
-            value.arrayValue.push_back(ParseValue());
-            SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == ']') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseString() {
-        JsonValue value;
-        value.type = JsonValue::String;
-        if (pos >= text.size() || text[pos] != '"') return value;
-        ++pos;
-        while (pos < text.size()) {
-            char c = text[pos++];
-            if (c == '"') break;
-            if (c == '\\' && pos < text.size()) {
-                char escaped = text[pos++];
-                switch (escaped) {
-                    case '"': value.stringValue.push_back('"'); break;
-                    case '\\': value.stringValue.push_back('\\'); break;
-                    case '/': value.stringValue.push_back('/'); break;
-                    case 'b': value.stringValue.push_back('\b'); break;
-                    case 'f': value.stringValue.push_back('\f'); break;
-                    case 'n': value.stringValue.push_back('\n'); break;
-                    case 'r': value.stringValue.push_back('\r'); break;
-                    case 't': value.stringValue.push_back('\t'); break;
-                    default: value.stringValue.push_back(escaped); break;
-                }
-            } else {
-                value.stringValue.push_back(c);
-            }
-        }
-        return value;
-    }
-
-    JsonValue ParseNumber() {
-        JsonValue value;
-        value.type = JsonValue::Number;
-        const char* start = text.c_str() + pos;
-        char* end = nullptr;
-        value.numberValue = std::strtod(start, &end);
-        pos += static_cast<std::size_t>(end - start);
-        return value;
-    }
-};
-
-const JsonValue* GetMember(const JsonValue& value, const char* name) {
-    if (value.type != JsonValue::Object) return nullptr;
-    std::map<std::string, JsonValue>::const_iterator it = value.objectValue.find(name);
-    return it == value.objectValue.end() ? nullptr : &it->second;
-}
-
-float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
-    if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
-    const JsonValue& value = arrayValue->arrayValue[index];
-    return value.type == JsonValue::Number ? static_cast<float>(value.numberValue) : fallback;
-}
-
-int IntMember(const JsonValue& value, const char* name, int fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::Number ? static_cast<int>(member->numberValue) : fallback;
-}
-
-std::string StringMember(const JsonValue& value, const char* name, const std::string& fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::String ? member->stringValue : fallback;
-}
+using assets::GetMember;
+using assets::IntMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::NumberAt;
+using assets::StringMember;
 
 Vector3 Vector3Member(const JsonValue& value, const char* name, Vector3 fallback) {
     const JsonValue* member = GetMember(value, name);
@@ -235,6 +92,43 @@ Matrix ComposeTransform(Vector3 translation, Quaternion rotation, Vector3 scale)
     return MatrixMultiply(MatrixMultiply(MatrixScale(scale.x, scale.y, scale.z), QuaternionToMatrix(rotation)), MatrixTranslate(translation.x, translation.y, translation.z));
 }
 
+Matrix MatrixFromGltfValues(const std::vector<float>& values) {
+    return Matrix{
+        values[0], values[4], values[8], values[12],
+        values[1], values[5], values[9], values[13],
+        values[2], values[6], values[10], values[14],
+        values[3], values[7], values[11], values[15]
+    };
+}
+
+Vector3 MatrixTranslation(const Matrix& matrix) {
+    return Vector3{matrix.m12, matrix.m13, matrix.m14};
+}
+
+Vector3 MatrixScaleFactors(const Matrix& matrix) {
+    Vector3 column0 = Vector3{matrix.m0, matrix.m1, matrix.m2};
+    Vector3 column1 = Vector3{matrix.m4, matrix.m5, matrix.m6};
+    Vector3 column2 = Vector3{matrix.m8, matrix.m9, matrix.m10};
+    return Vector3{Vector3Length(column0), Vector3Length(column1), Vector3Length(column2)};
+}
+
+Quaternion MatrixRotation(const Matrix& matrix, Vector3 scale) {
+    Vector3 column0 = Vector3{matrix.m0, matrix.m1, matrix.m2};
+    Vector3 column1 = Vector3{matrix.m4, matrix.m5, matrix.m6};
+    Vector3 column2 = Vector3{matrix.m8, matrix.m9, matrix.m10};
+    if (scale.x > 0.0001f) column0 = Vector3Scale(column0, 1.0f / scale.x);
+    if (scale.y > 0.0001f) column1 = Vector3Scale(column1, 1.0f / scale.y);
+    if (scale.z > 0.0001f) column2 = Vector3Scale(column2, 1.0f / scale.z);
+    Matrix rotationMatrix = Matrix{
+        column0.x, column1.x, column2.x, 0.0f,
+        column0.y, column1.y, column2.y, 0.0f,
+        column0.z, column1.z, column2.z, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
+    };
+    return QuaternionFromMatrix(rotationMatrix);
+}
+
+
 int CheckpointIndexFromName(const std::string& name) {
     std::size_t pos = name.find_last_of('_');
     if (pos == std::string::npos || pos + 1 >= name.size()) return 0;
@@ -276,8 +170,24 @@ struct ParsedNode {
     Vector3 scale;
     bool hasMatrix;
     std::vector<float> matrix;
+    Matrix localMatrix;
+    Matrix worldMatrix;
+    bool worldMatrixComputed;
     std::vector<int> children;
 };
+
+Matrix ComputeWorldMatrix(std::vector<ParsedNode>& nodes, int index) {
+    ParsedNode& node = nodes[index];
+    if (node.worldMatrixComputed) return node.worldMatrix;
+    if (node.parent >= 0 && node.parent < static_cast<int>(nodes.size())) {
+        Matrix parentWorld = ComputeWorldMatrix(nodes, node.parent);
+        node.worldMatrix = MatrixMultiply(node.localMatrix, parentWorld);
+    } else {
+        node.worldMatrix = node.localMatrix;
+    }
+    node.worldMatrixComputed = true;
+    return node.worldMatrix;
+}
 
 struct MeshBounds {
     Vector3 center;
@@ -414,7 +324,11 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         return;
     }
 
-    JsonValue root = JsonParser(jsonText).Parse();
+    JsonParser parser(jsonText);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "Level: GLB JSON parse warning in %s: %s", path.c_str(), parser.Error().c_str());
+    }
     const JsonValue* nodesValue = GetMember(root, "nodes");
     if (!nodesValue || nodesValue->type != JsonValue::Array) {
         TraceLog(LOG_WARNING, "Level: GLB has no nodes: %s", path.c_str());
@@ -464,27 +378,19 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         node.rotation = QuaternionMember(nodeValue, "rotation", Quaternion{0.0f, 0.0f, 0.0f, 1.0f});
         node.scale = Vector3Member(nodeValue, "scale", Vector3{1.0f, 1.0f, 1.0f});
         node.hasMatrix = false;
+        node.localMatrix = ComposeTransform(node.translation, node.rotation, node.scale);
+        node.worldMatrix = MatrixIdentity();
+        node.worldMatrixComputed = false;
         const JsonValue* matrix = GetMember(nodeValue, "matrix");
         if (matrix && matrix->type == JsonValue::Array && matrix->arrayValue.size() >= 16) {
             node.hasMatrix = true;
             for (std::size_t m = 0; m < 16; ++m) {
                 node.matrix.push_back(NumberAt(matrix, m, m % 5 == 0 ? 1.0f : 0.0f));
             }
-            node.translation = Vector3{node.matrix[12], node.matrix[13], node.matrix[14]};
-            Vector3 column0 = Vector3{node.matrix[0], node.matrix[1], node.matrix[2]};
-            Vector3 column1 = Vector3{node.matrix[4], node.matrix[5], node.matrix[6]};
-            Vector3 column2 = Vector3{node.matrix[8], node.matrix[9], node.matrix[10]};
-            node.scale = Vector3{Vector3Length(column0), Vector3Length(column1), Vector3Length(column2)};
-            if (node.scale.x > 0.0001f) column0 = Vector3Scale(column0, 1.0f / node.scale.x);
-            if (node.scale.y > 0.0001f) column1 = Vector3Scale(column1, 1.0f / node.scale.y);
-            if (node.scale.z > 0.0001f) column2 = Vector3Scale(column2, 1.0f / node.scale.z);
-            Matrix rotationMatrix = Matrix{
-                column0.x, column1.x, column2.x, 0.0f,
-                column0.y, column1.y, column2.y, 0.0f,
-                column0.z, column1.z, column2.z, 0.0f,
-                0.0f, 0.0f, 0.0f, 1.0f
-            };
-            node.rotation = QuaternionFromMatrix(rotationMatrix);
+            node.localMatrix = MatrixFromGltfValues(node.matrix);
+            node.translation = MatrixTranslation(node.localMatrix);
+            node.scale = MatrixScaleFactors(node.localMatrix);
+            node.rotation = MatrixRotation(node.localMatrix, node.scale);
         }
         const JsonValue* children = GetMember(nodeValue, "children");
         if (children && children->type == JsonValue::Array) {
@@ -507,21 +413,17 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
     }
 
     for (std::size_t i = 0; i < nodes.size(); ++i) {
+        ComputeWorldMatrix(nodes, static_cast<int>(i));
+    }
+
+    for (std::size_t i = 0; i < nodes.size(); ++i) {
         const ParsedNode& node = nodes[i];
         if (node.name.empty()) continue;
 
-        Vector3 worldPosition = node.translation;
-        Quaternion worldRotation = node.rotation;
-        Vector3 worldScale = node.scale;
-        int parent = node.parent;
-        while (parent >= 0 && parent < static_cast<int>(nodes.size())) {
-            const ParsedNode& p = nodes[parent];
-            worldPosition = Vector3{worldPosition.x * p.scale.x, worldPosition.y * p.scale.y, worldPosition.z * p.scale.z};
-            worldPosition = Vector3Add(p.translation, Vector3RotateByQuaternion(worldPosition, p.rotation));
-            worldRotation = QuaternionNormalize(QuaternionMultiply(p.rotation, worldRotation));
-            worldScale = Vector3{worldScale.x * p.scale.x, worldScale.y * p.scale.y, worldScale.z * p.scale.z};
-            parent = p.parent;
-        }
+        Matrix worldMatrix = node.worldMatrix;
+        Vector3 worldPosition = MatrixTranslation(worldMatrix);
+        Vector3 worldScale = MatrixScaleFactors(worldMatrix);
+        Quaternion worldRotation = QuaternionNormalize(MatrixRotation(worldMatrix, worldScale));
 
         MeshGeometry geometry;
         geometry.bounds.center = Vector3{0.0f, 0.0f, 0.0f};
@@ -529,8 +431,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         if (node.mesh >= 0 && node.mesh < static_cast<int>(meshGeometries.size())) {
             geometry = meshGeometries[node.mesh];
         }
-        Vector3 scaledLocalCenter = Vector3{geometry.bounds.center.x * worldScale.x, geometry.bounds.center.y * worldScale.y, geometry.bounds.center.z * worldScale.z};
-        Vector3 volumePosition = Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledLocalCenter, worldRotation));
+        Vector3 volumePosition = Vector3Transform(geometry.bounds.center, worldMatrix);
         Vector3 size = Vector3{fabsf(geometry.bounds.size.x * worldScale.x), fabsf(geometry.bounds.size.y * worldScale.y), fabsf(geometry.bounds.size.z * worldScale.z)};
 
         LevelDebugNode debugNode;
@@ -545,7 +446,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         debugNode.size = size;
 
         if (StartsWith(node.name, "VISUAL_")) {
-            level.renderParts.push_back(LevelRenderPart{node.mesh, ComposeTransform(worldPosition, worldRotation, worldScale)});
+            level.renderParts.push_back(LevelRenderPart{node.mesh, worldMatrix});
             debugNode.runtimeIndex = static_cast<int>(level.renderParts.size() - 1);
             level.debugNodes.push_back(debugNode);
             continue;
@@ -566,12 +467,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
                 collisionMesh.indices = geometry.indices;
                 collisionMesh.vertices.reserve(geometry.vertices.size());
                 for (std::size_t vertex = 0; vertex < geometry.vertices.size(); ++vertex) {
-                    Vector3 scaledVertex = Vector3{
-                        geometry.vertices[vertex].x * worldScale.x,
-                        geometry.vertices[vertex].y * worldScale.y,
-                        geometry.vertices[vertex].z * worldScale.z
-                    };
-                    collisionMesh.vertices.push_back(Vector3Add(worldPosition, Vector3RotateByQuaternion(scaledVertex, worldRotation)));
+                    collisionMesh.vertices.push_back(Vector3Transform(geometry.vertices[vertex], worldMatrix));
                 }
                 level.collisionMeshes.push_back(collisionMesh);
                 debugNode.runtimeIndex = static_cast<int>(level.collisionMeshes.size() - 1);
@@ -604,7 +500,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
         } else if (StartsWith(node.name, "TRIGGER_")) {
             LevelBoxVolume trigger;
             trigger.name = node.name;
-            trigger.position = worldPosition;
+            trigger.position = volumePosition;
             trigger.rotation = worldRotation;
             trigger.size = size;
             level.triggers.push_back(trigger);
@@ -614,7 +510,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
             LevelCheckpoint checkpoint;
             checkpoint.name = node.name;
             checkpoint.index = CheckpointIndexFromName(node.name);
-            checkpoint.position = worldPosition;
+            checkpoint.position = volumePosition;
             checkpoint.rotation = worldRotation;
             checkpoint.size = size;
             level.checkpoints.push_back(checkpoint);
@@ -622,7 +518,7 @@ void ParseLevelMetadata(const std::string& path, LevelData& level) {
             level.debugNodes.push_back(debugNode);
         } else if (node.name == "FINISH_LINE") {
             level.finishLine.name = node.name;
-            level.finishLine.position = worldPosition;
+            level.finishLine.position = volumePosition;
             level.finishLine.rotation = worldRotation;
             level.finishLine.size = size;
             level.hasFinishLine = true;

@@ -3,6 +3,17 @@
 
 #include "game/gameWorld.hpp"
 
+struct GameplayRenderContext {
+    WorldContext& world;
+    PlayerContext& player;
+    RenderContext& render;
+    EntityRegistry& npcs;
+    DebugUiState& debugUi;
+    ParticleSystem& particles;
+    GameWorld* editorWorld;
+};
+
+void DrawGameplay(GameplayRenderContext context);
 void DrawGameplay(GameWorld& gameWorld);
 
 #endif

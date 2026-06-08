@@ -218,7 +218,8 @@ void UpdateDialogueInput(EntityRegistry& registry, const InputMap& inputMap) {
     }
 }
 
-void ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPosition, float playerRadius) {
+bool ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPosition, float playerRadius) {
+    bool movedPlayer = false;
     for (std::size_t i = 0; i < registry.characters.size(); ++i) {
         const InteractableCharacter& character = registry.characters[i];
         for (std::size_t c = 0; c < character.colliders.size(); ++c) {
@@ -241,11 +242,14 @@ void ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPositio
                 float push = minDistance - dist;
                 playerPosition.x += (delta.x / dist) * push;
                 playerPosition.z += (delta.y / dist) * push;
+                movedPlayer = true;
             } else {
                 playerPosition.z += minDistance;
+                movedPlayer = true;
             }
         }
     }
+    return movedPlayer;
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────────────

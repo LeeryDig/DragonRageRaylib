@@ -4,6 +4,8 @@
 
 #include <raylib.h>
 
+#include "assets/json.hpp"
+
 namespace {
 
 int ParseKeyName(const std::string& name) {
@@ -42,18 +44,9 @@ int ParseKeyName(const std::string& name) {
     return KEY_NULL;
 }
 
-std::string ExtractStringValue(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return "";
-    std::size_t openQuote = json.find('"', colon + 1);
-    if (openQuote == std::string::npos) return "";
-    std::size_t closeQuote = json.find('"', openQuote + 1);
-    if (closeQuote == std::string::npos) return "";
-    return json.substr(openQuote + 1, closeQuote - openQuote - 1);
-}
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::StringMember;
 
 }  // namespace
 
@@ -78,8 +71,18 @@ InputMap LoadInputMap(const std::string& filePath, const InputMap& fallback) {
     std::string json = raw;
     UnloadFileText(raw);
 
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "InputMap: JSON parse warning in %s: %s", filePath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) {
+        TraceLog(LOG_WARNING, "InputMap: root is not object in %s", filePath.c_str());
+        return map;
+    }
+
     auto bind = [&](const std::string& key, int& field) {
-        std::string name = ExtractStringValue(json, key);
+        std::string name = StringMember(root, key.c_str(), "");
         if (!name.empty()) {
             int parsed = ParseKeyName(name);
             if (parsed != KEY_NULL) field = parsed;

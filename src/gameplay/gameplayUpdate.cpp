@@ -14,69 +14,89 @@
 #include "personController.hpp"
 #include "physics/jolt/joltWorld.hpp"
 
-void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
-    float physicsStep = gameWorld.player.config.fixedTimeStep;
-    gameWorld.player.physicsAccumulator += frameDelta;
+void UpdateGameplay(GameplayUpdateContext context, float frameDelta) {
+    PlayerContext& player = context.player;
+    RenderContext& render = context.render;
+    EntityRegistry& npcs = context.npcs;
+    DebugUiState& debugUi = context.debugUi;
+    ParticleSystem& particles = context.particles;
 
-    if (gameWorld.debugUi.enabled) {
+    float physicsStep = player.config.fixedTimeStep;
+    player.physicsAccumulator += frameDelta;
+
+    if (debugUi.enabled) {
         bool wantsFreeCamera = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
-        if (wantsFreeCamera && !gameWorld.debugUi.freeCameraActive) {
-            gameWorld.debugUi.freeCameraActive = true;
+        if (wantsFreeCamera && !debugUi.freeCameraActive) {
+            debugUi.freeCameraActive = true;
             DisableCursor();
-        } else if (!wantsFreeCamera && gameWorld.debugUi.freeCameraActive) {
-            gameWorld.debugUi.freeCameraActive = false;
+        } else if (!wantsFreeCamera && debugUi.freeCameraActive) {
+            debugUi.freeCameraActive = false;
             EnableCursor();
         }
 
-        if (gameWorld.debugUi.freeCameraActive) {
-            UpdateDebugCamera(gameWorld.render.debugCamera, gameWorld.render.camera);
+        if (debugUi.freeCameraActive) {
+            UpdateDebugCamera(render.debugCamera, render.camera);
         }
-        gameWorld.player.physicsAccumulator = 0.0f;
+        player.physicsAccumulator = 0.0f;
         return;
     }
 
-    bool dialogueOpen = gameWorld.npcs.dialogueOpen;
+    bool dialogueOpen = npcs.dialogueOpen;
     if (dialogueOpen) {
-        gameWorld.player.physicsAccumulator = 0.0f;
-        UpdateDialogueInput(gameWorld.npcs, gameWorld.player.input);
-        sysState = gameWorld.npcs.dialogueOpen ? SysState::DIALOGUE : SysState::PLAYING;
-        ApplyPersonCamera(gameWorld.render.camera, gameWorld.player.state, gameWorld.player.config, frameDelta);
+        player.physicsAccumulator = 0.0f;
+        UpdateDialogueInput(npcs, player.input);
+        sysState = npcs.dialogueOpen ? SysState::DIALOGUE : SysState::PLAYING;
+        ApplyPersonCamera(render.camera, player.state, player.config, frameDelta);
         return;
     }
 
     sysState = SysState::PLAYING;
-    UpdatePersonLook(gameWorld.player.state, gameWorld.player.config);
-    PersonInput input = ReadPersonInput(gameWorld.player.input, true);
+    UpdatePersonLook(player.state, player.config);
+    PersonInput input = ReadPersonInput(player.input, true);
 
     int steps = 0;
-    while (gameWorld.player.physicsAccumulator >= physicsStep && steps < 8) {
-        UpdatePersonHorizontalMovement(gameWorld.player.state, gameWorld.player.config, input, physicsStep);
+    while (player.physicsAccumulator >= physicsStep && steps < 8) {
+        UpdatePersonHorizontalMovement(player.state, player.config, input, physicsStep);
 
         Vector3 horizontalVelocity = Vector3{
-            gameWorld.player.state.velocity.x, 0.0f, gameWorld.player.state.velocity.z};
-        gameWorld.player.physics->UpdateCharacter(
-            gameWorld.player.state, gameWorld.player.config, horizontalVelocity, physicsStep);
-        ResolveCharacterCollisions(
-            gameWorld.npcs, gameWorld.player.state.position, gameWorld.player.config.capsuleRadius);
+            player.state.velocity.x, 0.0f, player.state.velocity.z};
+        player.physics->UpdateCharacter(
+            player.state, player.config, horizontalVelocity, physicsStep);
+        bool playerMovedByNpcCollision = ResolveCharacterCollisions(
+            npcs, player.state.position, player.config.capsuleRadius);
+        if (playerMovedByNpcCollision) {
+            player.physics->SetCharacterPosition(player.state.position);
+        }
 
-        gameWorld.player.physicsAccumulator -= physicsStep;
+        player.physicsAccumulator -= physicsStep;
         ++steps;
     }
 
-    ApplyPersonCamera(gameWorld.render.camera, gameWorld.player.state, gameWorld.player.config, frameDelta);
-    UpdateSmoking(gameWorld.player.smoking, gameWorld.player.smokingConfig, gameWorld.player.input, frameDelta);
-    UpdateSmokingParticles(gameWorld.player.smoking, gameWorld.player.smokingConfig, gameWorld.particles, gameWorld.player.state.position);
-    gameWorld.particles.UpdateParticles(frameDelta);
+    ApplyPersonCamera(render.camera, player.state, player.config, frameDelta);
+    UpdateSmoking(player.smoking, player.smokingConfig, player.input, frameDelta);
+    UpdateSmokingParticles(player.smoking, player.smokingConfig, particles, player.state.position);
+    particles.UpdateParticles(frameDelta);
     UpdateEntityFocus(
-        gameWorld.npcs,
-        gameWorld.render.camera,
-        gameWorld.player.state.position,
-        gameWorld.player.config.interactionDistance,
-        gameWorld.player.config.interactionRayLength);
-    if (IsActionPressed(gameWorld.player.input, GameAction::Interact)) {
-        BeginFocusedDialogue(gameWorld.npcs);
-        if (gameWorld.npcs.dialogueOpen) {
+        npcs,
+        render.camera,
+        player.state.position,
+        player.config.interactionDistance,
+        player.config.interactionRayLength);
+    if (IsActionPressed(player.input, GameAction::Interact)) {
+        BeginFocusedDialogue(npcs);
+        if (npcs.dialogueOpen) {
             sysState = SysState::DIALOGUE;
         }
     }
+}
+
+void UpdateGameplay(GameWorld& gameWorld, float frameDelta) {
+    UpdateGameplay(
+        GameplayUpdateContext{
+            gameWorld.player,
+            gameWorld.render,
+            gameWorld.npcs,
+            gameWorld.debugUi,
+            gameWorld.particles},
+        frameDelta);
 }

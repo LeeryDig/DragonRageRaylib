@@ -4,36 +4,20 @@
 
 #include <raylib.h>
 
+#include "assets/json.hpp"
+
 namespace {
 
-int ExtractInt(const std::string& json, const std::string& key, int fallback) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return fallback;
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return fallback;
-    char* end = nullptr;
-    long value = std::strtol(json.c_str() + colon + 1, &end, 10);
-    return (end == json.c_str() + colon + 1) ? fallback : static_cast<int>(value);
-}
-
-std::string ExtractString(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return "";
-    std::size_t openQuote = json.find('"', colon + 1);
-    if (openQuote == std::string::npos) return "";
-    std::size_t closeQuote = json.find('"', openQuote + 1);
-    if (closeQuote == std::string::npos) return "";
-    return json.substr(openQuote + 1, closeQuote - openQuote - 1);
-}
+using assets::BoolMember;
+using assets::IntMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::StringMember;
 
 }  // namespace
 
 WorldConfig DefaultWorldConfig() {
-    return WorldConfig{1280, 720, "Dragon Rage", 60};
+    return WorldConfig{1920, 1080, "Dragon Rage", 60, true};
 }
 
 WorldConfig LoadWorldConfig(const std::string& filePath, const WorldConfig& fallback) {
@@ -44,17 +28,29 @@ WorldConfig LoadWorldConfig(const std::string& filePath, const WorldConfig& fall
     std::string json = raw;
     UnloadFileText(raw);
 
-    int w = ExtractInt(json, "window_width", fallback.windowWidth);
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "WorldConfig: JSON parse warning in %s: %s", filePath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) {
+        TraceLog(LOG_WARNING, "WorldConfig: root is not object in %s", filePath.c_str());
+        return config;
+    }
+
+    int w = IntMember(root, "window_width", fallback.windowWidth);
     if (w > 0) config.windowWidth = w;
 
-    int h = ExtractInt(json, "window_height", fallback.windowHeight);
+    int h = IntMember(root, "window_height", fallback.windowHeight);
     if (h > 0) config.windowHeight = h;
 
-    std::string title = ExtractString(json, "window_title");
+    std::string title = StringMember(root, "window_title", "");
     if (!title.empty()) config.windowTitle = title;
 
-    int fps = ExtractInt(json, "target_fps", fallback.targetFps);
+    int fps = IntMember(root, "target_fps", fallback.targetFps);
     if (fps > 0) config.targetFps = fps;
+
+    config.fullscreen = BoolMember(root, "fullscreen", fallback.fullscreen);
 
     return config;
 }

@@ -10,230 +10,46 @@
 
 #include "raylib.h"
 #include "raymath.h"
+#include "assets/json.hpp"
 #include "utils.hpp"
 
 namespace {
 
 // ─── JSON helpers ─────────────────────────────────────────────────────────────
 
-std::string ExtractObjectBlock(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-    std::size_t blockStart = json.find('{', keyPos);
-    if (blockStart == std::string::npos) return "";
-    int depth = 0;
-    for (std::size_t i = blockStart; i < json.size(); ++i) {
-        if (json[i] == '{') ++depth;
-        if (json[i] == '}') {
-            --depth;
-            if (depth == 0) return json.substr(blockStart, i - blockStart + 1);
-        }
-    }
-    return "";
-}
+using assets::GetMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::NumberAt;
+using assets::StringMember;
 
-std::string ExtractArrayBlock(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return "";
-    std::size_t blockStart = json.find('[', keyPos);
-    if (blockStart == std::string::npos) return "";
-    int depth = 0;
-    for (std::size_t i = blockStart; i < json.size(); ++i) {
-        if (json[i] == '[') ++depth;
-        if (json[i] == ']') {
-            --depth;
-            if (depth == 0) return json.substr(blockStart, i - blockStart + 1);
-        }
-    }
-    return "";
-}
-
-std::vector<float> ExtractNumbers(const std::string& text) {
-    std::vector<float> values;
-    const char* cursor = text.c_str();
-    char* endCursor = nullptr;
-    while (*cursor != '\0') {
-        float value = strtof(cursor, &endCursor);
-        if (endCursor != cursor) {
-            values.push_back(value);
-            cursor = endCursor;
-        } else {
-            ++cursor;
-        }
-    }
-    return values;
-}
-
-std::string ExtractString(const std::string& json, const std::string& key, const std::string& fallback) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) return fallback;
-    std::size_t colon = json.find(':', keyPos);
-    if (colon == std::string::npos) return fallback;
-    std::size_t start = json.find('"', colon + 1);
-    if (start == std::string::npos) return fallback;
-    std::size_t end = start + 1;
-    while (end < json.size()) {
-        if (json[end] == '"' && json[end - 1] != '\\') break;
-        ++end;
-    }
-    if (end >= json.size()) return fallback;
-    return json.substr(start + 1, end - start - 1);
-}
-
-Vector3 ExtractVector3(const std::string& json, const std::string& key, Vector3 fallback) {
-    std::vector<float> values = ExtractNumbers(ExtractArrayBlock(json, key));
-    if (values.size() < 3) return fallback;
-    return Vector3{values[0], values[1], values[2]};
-}
-
-std::vector<InteractionChoice> ExtractChoices(const std::string& json) {
+std::vector<InteractionChoice> ExtractChoices(const JsonValue& characterConfig) {
     std::vector<InteractionChoice> choices;
-    std::string block = ExtractArrayBlock(json, "choices");
-    std::size_t pos = 0;
-    while (true) {
-        std::size_t textPos = block.find("\"text\"", pos);
-        if (textPos == std::string::npos) break;
-        std::string text = ExtractString(block.substr(textPos), "text", "...");
-        choices.push_back(InteractionChoice{text});
-        pos = textPos + 6;
+    const JsonValue* choicesValue = GetMember(characterConfig, "choices");
+    if (!choicesValue || choicesValue->type != JsonValue::Array) return choices;
+    for (std::size_t i = 0; i < choicesValue->arrayValue.size(); ++i) {
+        const JsonValue& item = choicesValue->arrayValue[i];
+        if (item.type != JsonValue::Object) continue;
+        InteractionChoice choice;
+        choice.text = StringMember(item, "text", "...");
+        choices.push_back(choice);
     }
     return choices;
 }
+
+// ─── GLB/GLTF parser ──────────────────────────────────────────────────────────
 
 bool StartsWith(const std::string& text, const char* prefix) {
     std::string p(prefix);
     return text.size() >= p.size() && text.compare(0, p.size(), p) == 0;
 }
 
-// ─── GLB/GLTF parser ──────────────────────────────────────────────────────────
-
-struct JsonValue {
-    enum Type { Null, Bool, Number, String, Array, Object } type;
-    bool boolValue;
-    double numberValue;
-    std::string stringValue;
-    std::vector<JsonValue> arrayValue;
-    std::map<std::string, JsonValue> objectValue;
-
-    JsonValue() : type(Null), boolValue(false), numberValue(0.0) {}
-};
-
-class JsonParser {
-  public:
-    explicit JsonParser(const std::string& textIn) : text(textIn), pos(0) {}
-    JsonValue Parse() { SkipWhitespace(); return ParseValue(); }
-
-  private:
-    const std::string& text;
-    std::size_t pos;
-
-    void SkipWhitespace() {
-        while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) ++pos;
-    }
-
-    bool Match(const char* token) {
-        std::size_t len = std::char_traits<char>::length(token);
-        if (text.compare(pos, len, token) == 0) { pos += len; return true; }
-        return false;
-    }
-
-    JsonValue ParseValue() {
-        SkipWhitespace();
-        if (pos >= text.size()) return JsonValue();
-        char c = text[pos];
-        if (c == '{') return ParseObject();
-        if (c == '[') return ParseArray();
-        if (c == '"') return ParseString();
-        if (c == '-' || (c >= '0' && c <= '9')) return ParseNumber();
-        JsonValue value;
-        if (Match("true")) { value.type = JsonValue::Bool; value.boolValue = true; return value; }
-        if (Match("false")) { value.type = JsonValue::Bool; value.boolValue = false; return value; }
-        Match("null");
-        return value;
-    }
-
-    JsonValue ParseObject() {
-        JsonValue value; value.type = JsonValue::Object; ++pos; SkipWhitespace();
-        if (pos < text.size() && text[pos] == '}') { ++pos; return value; }
-        while (pos < text.size()) {
-            JsonValue key = ParseString(); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ':') ++pos;
-            value.objectValue[key.stringValue] = ParseValue(); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == '}') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseArray() {
-        JsonValue value; value.type = JsonValue::Array; ++pos; SkipWhitespace();
-        if (pos < text.size() && text[pos] == ']') { ++pos; return value; }
-        while (pos < text.size()) {
-            value.arrayValue.push_back(ParseValue()); SkipWhitespace();
-            if (pos < text.size() && text[pos] == ',') { ++pos; continue; }
-            if (pos < text.size() && text[pos] == ']') { ++pos; break; }
-        }
-        return value;
-    }
-
-    JsonValue ParseString() {
-        JsonValue value; value.type = JsonValue::String;
-        if (pos >= text.size() || text[pos] != '"') return value;
-        ++pos;
-        while (pos < text.size()) {
-            char c = text[pos++];
-            if (c == '"') break;
-            if (c == '\\' && pos < text.size()) {
-                char escaped = text[pos++];
-                switch (escaped) {
-                    case '"': value.stringValue.push_back('"'); break;
-                    case '\\': value.stringValue.push_back('\\'); break;
-                    case '/': value.stringValue.push_back('/'); break;
-                    case 'b': value.stringValue.push_back('\b'); break;
-                    case 'f': value.stringValue.push_back('\f'); break;
-                    case 'n': value.stringValue.push_back('\n'); break;
-                    case 'r': value.stringValue.push_back('\r'); break;
-                    case 't': value.stringValue.push_back('\t'); break;
-                    default: value.stringValue.push_back(escaped); break;
-                }
-            } else value.stringValue.push_back(c);
-        }
-        return value;
-    }
-
-    JsonValue ParseNumber() {
-        JsonValue value; value.type = JsonValue::Number;
-        const char* start = text.c_str() + pos; char* end = nullptr;
-        value.numberValue = std::strtod(start, &end);
-        pos += static_cast<std::size_t>(end - start);
-        return value;
-    }
-};
-
-const JsonValue* GetMember(const JsonValue& value, const char* name) {
-    if (value.type != JsonValue::Object) return nullptr;
-    std::map<std::string, JsonValue>::const_iterator it = value.objectValue.find(name);
-    return it == value.objectValue.end() ? nullptr : &it->second;
-}
-
-float NumberAt(const JsonValue* arrayValue, std::size_t index, float fallback) {
-    if (!arrayValue || arrayValue->type != JsonValue::Array || index >= arrayValue->arrayValue.size()) return fallback;
-    const JsonValue& value = arrayValue->arrayValue[index];
-    return value.type == JsonValue::Number ? static_cast<float>(value.numberValue) : fallback;
-}
-
-int IntMember(const JsonValue& value, const char* name, int fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::Number ? static_cast<int>(member->numberValue) : fallback;
-}
-
-std::string StringMember(const JsonValue& value, const char* name, const std::string& fallback) {
-    const JsonValue* member = GetMember(value, name);
-    return member && member->type == JsonValue::String ? member->stringValue : fallback;
-}
+using assets::GetMember;
+using assets::IntMember;
+using assets::JsonParser;
+using assets::JsonValue;
+using assets::NumberAt;
+using assets::StringMember;
 
 Vector3 Vector3Member(const JsonValue& value, const char* name, Vector3 fallback) {
     const JsonValue* member = GetMember(value, name);
@@ -316,7 +132,11 @@ Matrix ComposeTransform(Vector3 translation, Quaternion rotation, Vector3 scale)
 void ParseCharacterModelMetadata(InteractableCharacter& character) {
     std::string jsonText;
     if (!ReadGlbJson(character.modelPath, jsonText)) return;
-    JsonValue root = JsonParser(jsonText).Parse();
+    JsonParser parser(jsonText);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "Character metadata: GLB JSON parse warning in %s: %s", character.modelPath.c_str(), parser.Error().c_str());
+    }
 
     std::vector<MeshBounds> meshBounds;
     const JsonValue* meshesValue = GetMember(root, "meshes");
@@ -436,15 +256,22 @@ bool LoadInteractableCharacter(const std::string& configPath, InteractableCharac
     std::string json = raw;
     UnloadFileText(raw);
 
-    std::string characterBlock = ExtractObjectBlock(json, "character");
-    if (characterBlock.empty()) return false;
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "Character config: JSON parse warning in %s: %s", configPath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) return false;
+
+    const JsonValue* characterConfig = GetMember(root, "character");
+    if (!characterConfig || characterConfig->type != JsonValue::Object) return false;
 
     character = {};
-    character.id = ExtractString(characterBlock, "id", "character");
-    character.displayName = ExtractString(characterBlock, "display_name", "Personagem");
-    character.dialogueText = ExtractString(characterBlock, "dialogue_text", "Texto placeholder.");
-    character.modelPath = Utils::ResolveProjectPath(ExtractString(characterBlock, "model_path", ""));
-    character.choices = ExtractChoices(characterBlock);
+    character.id = StringMember(*characterConfig, "id", "character");
+    character.displayName = StringMember(*characterConfig, "display_name", "Personagem");
+    character.dialogueText = StringMember(*characterConfig, "dialogue_text", "Texto placeholder.");
+    character.modelPath = Utils::ResolveProjectPath(StringMember(*characterConfig, "model_path", ""));
+    character.choices = ExtractChoices(*characterConfig);
     character.hasModel = false;
     if (!character.modelPath.empty() && FileExists(character.modelPath.c_str())) {
         character.model = LoadModel(character.modelPath.c_str());

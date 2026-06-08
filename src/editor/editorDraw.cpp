@@ -448,6 +448,11 @@ void TeleportPerson(GameWorld& gameWorld, Vector3 position) {
     gameWorld.player.state.position = position;
     gameWorld.player.state.velocity = Vector3Zero();
     gameWorld.player.state.grounded = false;
+    if (gameWorld.player.physics) {
+        gameWorld.player.physics->SetCharacterPosition(position);
+        gameWorld.player.physics->SetCharacterVelocity(Vector3Zero());
+    }
+    gameWorld.player.physicsAccumulator = 0.0f;
     ApplyPersonCamera(gameWorld.render.camera, gameWorld.player.state, gameWorld.player.config, 1.0f);
 }
 

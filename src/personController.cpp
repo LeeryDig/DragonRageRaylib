@@ -9,79 +9,16 @@
 
 #include "raymath.h"
 
+#include "assets/json.hpp"
 #include "utils.hpp"
 
 #include "input/inputMap.hpp"
 
 namespace {
 
-std::string ExtractArrayBlock(const std::string& json, const std::string& key) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) {
-        return "";
-    }
-
-    std::size_t blockStart = json.find('[', keyPos);
-    if (blockStart == std::string::npos) {
-        return "";
-    }
-
-    int depth = 0;
-    for (std::size_t i = blockStart; i < json.size(); ++i) {
-        if (json[i] == '[') {
-            depth++;
-        } else if (json[i] == ']') {
-            depth--;
-            if (depth == 0) {
-                return json.substr(blockStart, i - blockStart + 1);
-            }
-        }
-    }
-
-    return "";
-}
-
-std::vector<float> ExtractNumbers(const std::string& text) {
-    std::vector<float> values;
-    const char* cursor = text.c_str();
-    char* endCursor = nullptr;
-    while (*cursor != '\0') {
-        float value = strtof(cursor, &endCursor);
-        if (endCursor != cursor) {
-            values.push_back(value);
-            cursor = endCursor;
-        } else {
-            ++cursor;
-        }
-    }
-    return values;
-}
-
-float ExtractFloat(const std::string& json, const std::string& key, float fallbackValue) {
-    std::string searchKey = "\"" + key + "\"";
-    std::size_t keyPos = json.find(searchKey);
-    if (keyPos == std::string::npos) {
-        return fallbackValue;
-    }
-
-    std::size_t valueStart = json.find(':', keyPos);
-    if (valueStart == std::string::npos) {
-        return fallbackValue;
-    }
-
-    char* endCursor = nullptr;
-    float value = strtof(json.c_str() + valueStart + 1, &endCursor);
-    return endCursor == json.c_str() + valueStart + 1 ? fallbackValue : value;
-}
-
-Vector3 ExtractVector3(const std::string& json, const std::string& key, Vector3 fallbackValue) {
-    std::vector<float> values = ExtractNumbers(ExtractArrayBlock(json, key));
-    if (values.size() < 3) {
-        return fallbackValue;
-    }
-    return Vector3{values[0], values[1], values[2]};
-}
+using assets::FloatMember;
+using assets::JsonParser;
+using assets::JsonValue;
 
 float MoveTowardsScalar(float value, float target, float maxDelta) {
     if (fabsf(target - value) <= maxDelta) {
@@ -133,22 +70,32 @@ PersonConfig LoadPersonConfig(const std::string& filePath, const PersonConfig& f
     std::string json = rawFileContents;
     UnloadFileText(rawFileContents);
 
-    config.fixedTimeStep = ExtractFloat(json, "fixed_time_step", fallbackConfig.fixedTimeStep);
-    config.walkSpeed = ExtractFloat(json, "walk_speed", fallbackConfig.walkSpeed);
-    config.acceleration = ExtractFloat(json, "acceleration", fallbackConfig.acceleration);
-    config.deceleration = ExtractFloat(json, "deceleration", fallbackConfig.deceleration);
-    config.turnSpeed = ExtractFloat(json, "turn_speed", fallbackConfig.turnSpeed);
-    config.gravity = ExtractFloat(json, "gravity", fallbackConfig.gravity);
-    config.groundSnapDistance = ExtractFloat(json, "ground_snap_distance", fallbackConfig.groundSnapDistance);
-    config.capsuleRadius = ExtractFloat(json, "capsule_radius", fallbackConfig.capsuleRadius);
-    config.capsuleHeight = ExtractFloat(json, "capsule_height", fallbackConfig.capsuleHeight);
-    config.eyeHeight = ExtractFloat(json, "eye_height", fallbackConfig.eyeHeight);
-    config.cameraSmooth = ExtractFloat(json, "camera_smooth", fallbackConfig.cameraSmooth);
-    config.cameraMouseSensitivity = ExtractFloat(json, "camera_mouse_sensitivity", fallbackConfig.cameraMouseSensitivity);
-    config.interactionDistance = ExtractFloat(json, "interaction_distance", fallbackConfig.interactionDistance);
-    config.interactionRayLength = ExtractFloat(json, "interaction_ray_length", fallbackConfig.interactionRayLength);
-    config.cameraPitchMinDegrees = ExtractFloat(json, "camera_pitch_min_degrees", fallbackConfig.cameraPitchMinDegrees);
-    config.cameraPitchMaxDegrees = ExtractFloat(json, "camera_pitch_max_degrees", fallbackConfig.cameraPitchMaxDegrees);
+    JsonParser parser(json);
+    JsonValue root = parser.Parse();
+    if (parser.HadError()) {
+        TraceLog(LOG_WARNING, "PersonConfig: JSON parse warning in %s: %s", filePath.c_str(), parser.Error().c_str());
+    }
+    if (root.type != JsonValue::Object) {
+        TraceLog(LOG_WARNING, "PersonConfig: root is not object in %s", filePath.c_str());
+        return config;
+    }
+
+    config.fixedTimeStep = FloatMember(root, "fixed_time_step", fallbackConfig.fixedTimeStep);
+    config.walkSpeed = FloatMember(root, "walk_speed", fallbackConfig.walkSpeed);
+    config.acceleration = FloatMember(root, "acceleration", fallbackConfig.acceleration);
+    config.deceleration = FloatMember(root, "deceleration", fallbackConfig.deceleration);
+    config.turnSpeed = FloatMember(root, "turn_speed", fallbackConfig.turnSpeed);
+    config.gravity = FloatMember(root, "gravity", fallbackConfig.gravity);
+    config.groundSnapDistance = FloatMember(root, "ground_snap_distance", fallbackConfig.groundSnapDistance);
+    config.capsuleRadius = FloatMember(root, "capsule_radius", fallbackConfig.capsuleRadius);
+    config.capsuleHeight = FloatMember(root, "capsule_height", fallbackConfig.capsuleHeight);
+    config.eyeHeight = FloatMember(root, "eye_height", fallbackConfig.eyeHeight);
+    config.cameraSmooth = FloatMember(root, "camera_smooth", fallbackConfig.cameraSmooth);
+    config.cameraMouseSensitivity = FloatMember(root, "camera_mouse_sensitivity", fallbackConfig.cameraMouseSensitivity);
+    config.interactionDistance = FloatMember(root, "interaction_distance", fallbackConfig.interactionDistance);
+    config.interactionRayLength = FloatMember(root, "interaction_ray_length", fallbackConfig.interactionRayLength);
+    config.cameraPitchMinDegrees = FloatMember(root, "camera_pitch_min_degrees", fallbackConfig.cameraPitchMinDegrees);
+    config.cameraPitchMaxDegrees = FloatMember(root, "camera_pitch_max_degrees", fallbackConfig.cameraPitchMaxDegrees);
 
     return config;
 }

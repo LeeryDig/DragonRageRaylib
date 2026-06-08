@@ -280,6 +280,12 @@ void JoltWorld::SetCharacterPosition(Vector3 position) {
     impl->character->SetPosition(ToJoltR(Vector3Add(position, Vector3{0.0f, bottomToCenter, 0.0f})));
 }
 
+void JoltWorld::SetCharacterVelocity(Vector3 velocity) {
+    if (!impl->character) return;
+    impl->characterVelocity = velocity;
+    impl->character->SetLinearVelocity(ToJolt(velocity));
+}
+
 void JoltWorld::UpdateCharacter(PersonState& person, const PersonConfig& config, Vector3 desiredHorizontalVelocity, float deltaTime) {
     if (!impl->ready || !impl->character || deltaTime <= 0.0f) return;
 

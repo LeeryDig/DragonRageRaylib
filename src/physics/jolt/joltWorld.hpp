@@ -42,6 +42,7 @@ class JoltWorld {
     void LoadLevel(const LevelData& level);
     void CreateCharacter(const PersonConfig& config, Vector3 position);
     void SetCharacterPosition(Vector3 position);
+    void SetCharacterVelocity(Vector3 velocity);
     void UpdateCharacter(PersonState& person, const PersonConfig& config, Vector3 desiredHorizontalVelocity, float deltaTime);
 
     bool Raycast(Vector3 origin, Vector3 direction, float distance, RaycastHit& hit) const;
