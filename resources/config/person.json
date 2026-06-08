@@ -11,7 +11,6 @@
   "eye_height": 1.650000,
   "camera_smooth": 0.000000,
   "camera_mouse_sensitivity": 0.003000,
-  "interaction_distance": 2.500000,
   "interaction_ray_length": 4.000000,
   "camera_pitch_min_degrees": -80.000000,
   "camera_pitch_max_degrees": 80.000000

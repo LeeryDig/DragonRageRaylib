@@ -76,12 +76,7 @@ void UpdateGameplay(GameplayUpdateContext context, float frameDelta) {
     UpdateSmoking(player.smoking, player.smokingConfig, player.input, frameDelta);
     UpdateSmokingParticles(player.smoking, player.smokingConfig, particles, player.state.position);
     particles.UpdateParticles(frameDelta);
-    UpdateEntityFocus(
-        npcs,
-        render.camera,
-        player.state.position,
-        player.config.interactionDistance,
-        player.config.interactionRayLength);
+    UpdateEntityFocus(npcs, render.camera, player.config.interactionRayLength);
     if (IsActionPressed(player.input, GameAction::Interact)) {
         BeginFocusedDialogue(npcs);
         if (npcs.dialogueOpen) {

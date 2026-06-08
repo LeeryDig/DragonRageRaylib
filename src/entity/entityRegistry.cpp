@@ -8,26 +8,10 @@
 #include "raylib.h"
 #include "raymath.h"
 
+#include "interaction/interactionRay.hpp"
 #include "interactionSystem.hpp"
 
 namespace {
-
-float DistancePointToRay(Vector3 point, Ray ray) {
-    Vector3 toPoint = Vector3Subtract(point, ray.position);
-    float t = std::max(0.0f, Vector3DotProduct(toPoint, ray.direction));
-    Vector3 closest = Vector3Add(ray.position, Vector3Scale(ray.direction, t));
-    return Vector3Distance(point, closest);
-}
-
-float DistanceRayToCapsuleApprox(Ray ray, const CharacterCapsule& capsule) {
-    float best = std::min(DistancePointToRay(capsule.bottom, ray), DistancePointToRay(capsule.top, ray));
-    for (int i = 1; i < 6; ++i) {
-        float t = static_cast<float>(i) / 6.0f;
-        Vector3 point = Vector3Lerp(capsule.bottom, capsule.top, t);
-        best = std::min(best, DistancePointToRay(point, ray));
-    }
-    return best;
-}
 
 void WrapAndDrawUiText(const std::string& text, int x, int y, int fontSize, int maxWidth, Color color) {
     std::string line;
@@ -167,25 +151,18 @@ int IndexOfCharacter(const EntityRegistry& registry, EntityId id) {
 
 // ─── Gameplay operations ──────────────────────────────────────────────────────
 
-void UpdateEntityFocus(EntityRegistry& registry, const Camera& camera, Vector3 playerPosition, float interactionDistance, float rayLength) {
+void UpdateEntityFocus(EntityRegistry& registry, const Camera& camera, float rayLength) {
     registry.focusedId = INVALID_ENTITY;
     if (registry.dialogueOpen) return;
 
-    Ray ray = Ray{camera.position, Vector3Normalize(Vector3Subtract(camera.target, camera.position))};
+    Ray ray = BuildInteractionRay(camera);
     float bestDistance = rayLength;
     for (std::size_t i = 0; i < registry.characters.size(); ++i) {
         const InteractableCharacter& character = registry.characters[i];
         for (std::size_t c = 0; c < character.colliders.size(); ++c) {
-            const CharacterCapsule& capsule = character.colliders[c];
-            Vector3 center = Vector3Scale(Vector3Add(capsule.bottom, capsule.top), 0.5f);
-            float dx = playerPosition.x - center.x;
-            float dz = playerPosition.z - center.z;
-            if (sqrtf(dx * dx + dz * dz) > interactionDistance + capsule.radius) continue;
-
-            float aimDistance = DistanceRayToCapsuleApprox(ray, capsule) - capsule.radius;
-            float cameraDistance = Vector3Distance(camera.position, center);
-            if (aimDistance <= 0.25f && cameraDistance <= rayLength && cameraDistance < bestDistance) {
-                bestDistance = cameraDistance;
+            float hitDistance = 0.0f;
+            if (RayHitsInteractionCapsule(ray, character.colliders[c], rayLength, 0.25f, hitDistance) && hitDistance < bestDistance) {
+                bestDistance = hitDistance;
                 registry.focusedId = registry.characterIds[i];
             }
         }

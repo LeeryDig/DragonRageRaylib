@@ -201,6 +201,24 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
         }
     }
 
+    const JsonValue* radios = GetMember(root, "radios");
+    if (radios && radios->type == JsonValue::Array) {
+        for (std::size_t i = 0; i < radios->arrayValue.size(); ++i) {
+            const JsonValue& item = radios->arrayValue[i];
+            if (item.type != JsonValue::Object) continue;
+            LevelRadioConfig radio;
+            radio.id = StringMember(item, "id", TextFormat("radio_%02d", static_cast<int>(i) + 1));
+            radio.youtubeUrl = StringMember(item, "youtubeUrl", "");
+            radio.position = Vector3Member(item, "position", radio.position);
+            radio.rotation = QuaternionFromEulerDegrees(Vector3Member(item, "rotation", EulerDegreesFromQuaternion(radio.rotation)));
+            radio.scale = Vector3Member(item, "scale", radio.scale);
+            radio.interactionRadius = NumberMember(item, "interactionRadius", radio.interactionRadius);
+            radio.audibleRadius = NumberMember(item, "audibleRadius", radio.audibleRadius);
+            radio.autoplay = BoolMember(item, "autoplay", radio.autoplay);
+            config.radios.push_back(radio);
+        }
+    }
+
     const JsonValue* characters = GetMember(root, "characters");
     if (characters && characters->type == JsonValue::Array) {
         for (std::size_t i = 0; i < characters->arrayValue.size(); ++i) {
@@ -216,13 +234,14 @@ LevelRuntimeConfig LoadLevelRuntimeConfig(const std::string& configPath) {
     }
 
     TraceLog(LOG_INFO,
-        "Level config: loaded %s skybox=%s fog=%s lights=%zu characters=%zu props=%zu",
+        "Level config: loaded %s skybox=%s fog=%s lights=%zu characters=%zu props=%zu radios=%zu",
         configPath.c_str(),
         config.skyboxPath.empty() ? "(none)" : config.skyboxPath.c_str(),
         config.fog.enabled ? "on" : "off",
         config.lighting.lights.size(),
         config.characters.size(),
-        config.props.size());
+        config.props.size(),
+        config.radios.size());
     return config;
 }
 
@@ -286,6 +305,22 @@ bool SaveLevelRuntimeConfig(const std::string& configPath, const LevelRuntimeCon
         file << "      \"rotation\": [" << rotationDegrees.x << ", " << rotationDegrees.y << ", " << rotationDegrees.z << "],\n";
         file << "      \"scale\": [" << prop.scale.x << ", " << prop.scale.y << ", " << prop.scale.z << "]\n";
         file << "    }" << (i + 1 < config.props.size() ? "," : "") << "\n";
+    }
+    file << "  ],\n";
+    file << "  \"radios\": [\n";
+    for (std::size_t i = 0; i < config.radios.size(); ++i) {
+        const LevelRadioConfig& radio = config.radios[i];
+        Vector3 rotationDegrees = EulerDegreesFromQuaternion(radio.rotation);
+        file << "    {\n";
+        file << "      \"id\": \"" << radio.id << "\",\n";
+        file << "      \"youtubeUrl\": \"" << radio.youtubeUrl << "\",\n";
+        file << "      \"position\": [" << radio.position.x << ", " << radio.position.y << ", " << radio.position.z << "],\n";
+        file << "      \"rotation\": [" << rotationDegrees.x << ", " << rotationDegrees.y << ", " << rotationDegrees.z << "],\n";
+        file << "      \"scale\": [" << radio.scale.x << ", " << radio.scale.y << ", " << radio.scale.z << "],\n";
+        file << "      \"interactionRadius\": " << radio.interactionRadius << ",\n";
+        file << "      \"audibleRadius\": " << radio.audibleRadius << ",\n";
+        file << "      \"autoplay\": " << (radio.autoplay ? "true" : "false") << "\n";
+        file << "    }" << (i + 1 < config.radios.size() ? "," : "") << "\n";
     }
     file << "  ],\n";
     file << "  \"characters\": [\n";

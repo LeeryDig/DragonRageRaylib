@@ -33,7 +33,7 @@ const InteractableCharacter& CharacterAt(const EntityRegistry& registry, int ind
 EntityId CharacterIdAt(const EntityRegistry& registry, int index);
 int IndexOfCharacter(const EntityRegistry& registry, EntityId id);
 
-void UpdateEntityFocus(EntityRegistry& registry, const Camera& camera, Vector3 playerPosition, float interactionDistance, float rayLength);
+void UpdateEntityFocus(EntityRegistry& registry, const Camera& camera, float rayLength);
 void BeginFocusedDialogue(EntityRegistry& registry);
 void UpdateDialogueInput(EntityRegistry& registry, const InputMap& inputMap);
 bool ResolveCharacterCollisions(EntityRegistry& registry, Vector3& playerPosition, float playerRadius);

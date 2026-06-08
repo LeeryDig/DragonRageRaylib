@@ -52,7 +52,6 @@ PersonConfig DefaultPersonConfig() {
     config.eyeHeight = 1.65f;
     config.cameraSmooth = 0.0f;
     config.cameraMouseSensitivity = 0.003f;
-    config.interactionDistance = 2.5f;
     config.interactionRayLength = 4.0f;
     config.cameraPitchMinDegrees = -35.0f;
     config.cameraPitchMaxDegrees = 55.0f;
@@ -92,7 +91,6 @@ PersonConfig LoadPersonConfig(const std::string& filePath, const PersonConfig& f
     config.eyeHeight = FloatMember(root, "eye_height", fallbackConfig.eyeHeight);
     config.cameraSmooth = FloatMember(root, "camera_smooth", fallbackConfig.cameraSmooth);
     config.cameraMouseSensitivity = FloatMember(root, "camera_mouse_sensitivity", fallbackConfig.cameraMouseSensitivity);
-    config.interactionDistance = FloatMember(root, "interaction_distance", fallbackConfig.interactionDistance);
     config.interactionRayLength = FloatMember(root, "interaction_ray_length", fallbackConfig.interactionRayLength);
     config.cameraPitchMinDegrees = FloatMember(root, "camera_pitch_min_degrees", fallbackConfig.cameraPitchMinDegrees);
     config.cameraPitchMaxDegrees = FloatMember(root, "camera_pitch_max_degrees", fallbackConfig.cameraPitchMaxDegrees);
@@ -240,7 +238,6 @@ bool SavePersonConfig(const std::string& filePath, const PersonConfig& cfg) {
     f << "  \"eye_height\": "               << cfg.eyeHeight              << ",\n";
     f << "  \"camera_smooth\": "            << cfg.cameraSmooth           << ",\n";
     f << "  \"camera_mouse_sensitivity\": " << cfg.cameraMouseSensitivity << ",\n";
-    f << "  \"interaction_distance\": "     << cfg.interactionDistance    << ",\n";
     f << "  \"interaction_ray_length\": "   << cfg.interactionRayLength   << ",\n";
     f << "  \"camera_pitch_min_degrees\": " << cfg.cameraPitchMinDegrees  << ",\n";
     f << "  \"camera_pitch_max_degrees\": " << cfg.cameraPitchMaxDegrees  << "\n";

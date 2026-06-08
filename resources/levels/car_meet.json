@@ -59,6 +59,18 @@
   },
   "props": [
   ],
+  "radios": [
+    {
+      "id": "radio_01",
+      "youtubeUrl": "https://www.youtube.com/watch?v=-6hxH80TCp8&list=RD-6hxH80TCp8",
+      "position": [6.161, 1.000, -7.509],
+      "rotation": [0.000, 0.000, 0.000],
+      "scale": [1.000, 1.000, 1.000],
+      "interactionRadius": 2.000,
+      "audibleRadius": 18.000,
+      "autoplay": false
+    }
+  ],
   "characters": [
     {
       "config": "resources/character/chartest.json",

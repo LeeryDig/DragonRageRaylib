@@ -7,6 +7,7 @@
 
 #include "raylib.h"
 
+#include "audio/radioSystem.hpp"
 #include "debug/cameraDebug.hpp"
 #include "debug/debugIcons.hpp"
 #include "entity/entityRegistry.hpp"
@@ -77,6 +78,7 @@ struct DebugUiState {
 struct WorldContext {
     StaticWorld statics;
     std::vector<RuntimeProp> props;
+    std::vector<RuntimeRadio> radios;
     LevelsConfig levelsConfig;
     LevelData level;
     int currentLevelConfigIndex;
